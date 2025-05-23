@@ -1,20 +1,42 @@
 #include <iostream>
-#include <chrono>
 #include <stdlib.h>
 #include <cuda_runtime.h>
+
+#include "timer.cuh"
+#include "checker.cuh"
 
 #define N 4194304
 #define BLOCK_SIZE 256
 
-#define CHECK_CUDA(call)                                                                               \
-    {                                                                                                  \
-        cudaError_t err = call;                                                                        \
-        if (err != cudaSuccess)                                                                        \
-        {                                                                                              \
-            fprintf(stderr, "CUDA error in %s:%d: %s\n", __FILE__, __LINE__, cudaGetErrorString(err)); \
-            exit(EXIT_FAILURE);                                                                        \
-        }                                                                                              \
+void initData(int *vector, int n)
+{
+    srand(42);
+    for (int i = 0; i < n; i++)
+    {
+        vector[i] = rand() % 100;
     }
+}
+
+void checkResult(int cpuResult, int gpuResult)
+{
+    if (fabs(cpuResult - gpuResult) > 1e-5)
+    {
+        std::cerr << "Results do not match!" << std::endl;
+        std::cerr << "CPU result: " << cpuResult << ", GPU result: " << gpuResult << std::endl;
+        exit(EXIT_FAILURE);
+    }
+    std::cout << "Results are correct!" << std::endl;
+}
+
+void reductionCpu(int *h_in_data, int *h_out_data, unsigned int n)
+{
+    int sum = 0;
+    for (unsigned int i = 0; i < n; i++)
+    {
+        sum += h_in_data[i];
+    }
+    h_out_data[0] = sum;
+}
 
 template <unsigned int blockSize>
 __device__ void warpReduce(volatile int *sdata, unsigned int tid)
@@ -34,7 +56,7 @@ __device__ void warpReduce(volatile int *sdata, unsigned int tid)
 }
 
 template <int blockSize>
-__global__ void reduction(int *g_in_data, int *g_out_data, unsigned int n)
+__global__ void reductionGpu(int *g_in_data, int *g_out_data, unsigned int n)
 {
     extern __shared__ int sdata[];
 
@@ -86,65 +108,72 @@ __global__ void reduction(int *g_in_data, int *g_out_data, unsigned int n)
 
 int main()
 {
-    // Set bytes and number of blocks
     size_t bytes = N * sizeof(int);
     const int numBlocks = (N + (2 * BLOCK_SIZE) - 1) / (2 * BLOCK_SIZE);
 
-    // Allocate memory on CPU
     int *h_in = new int[N];
-    int *h_out = new int[(N + BLOCK_SIZE - 1) / BLOCK_SIZE];
+    int *h_out_cpu = new int[1];
+    int *h_out_gpu = new int[(N + BLOCK_SIZE - 1) / BLOCK_SIZE];
+
+    initData(h_in, N);
 
     int *d_in, *d_out;
-
-    // Initialize data
-    srand(42);
-    for (int i = 0; i < N; i++)
-    {
-        h_in[i] = rand() % 100;
-    }
 
     // Allocate memory on GPU
     CHECK_CUDA(cudaMalloc(&d_in, bytes));
     CHECK_CUDA(cudaMalloc(&d_out, (N + BLOCK_SIZE - 1) / BLOCK_SIZE * sizeof(int)));
 
-    // Copy input to device
+    // Copy data from host to device
     CHECK_CUDA(cudaMemcpy(d_in, h_in, bytes, cudaMemcpyHostToDevice));
 
-    // Perfom warm-ups
+    // Perfom warm up
     std::cout << "Warming up..." << std::endl;
     for (int i = 0; i < 3; i++)
     {
-        reduction<BLOCK_SIZE><<<numBlocks, BLOCK_SIZE, BLOCK_SIZE * sizeof(int)>>>(d_in, d_out, N);
-        cudaDeviceSynchronize();
+        reductionGpu<BLOCK_SIZE><<<numBlocks, BLOCK_SIZE, BLOCK_SIZE * sizeof(int)>>>(d_in, d_out, N);
+        CHECK_CUDA(cudaDeviceSynchronize());
     }
 
-    // Launch kernel
-    std::cout << "Running kernel..." << std::endl;
-    auto start = std::chrono::high_resolution_clock::now();
-    reduction<BLOCK_SIZE><<<numBlocks, BLOCK_SIZE, BLOCK_SIZE * sizeof(int)>>>(d_in, d_out, N);
-    cudaDeviceSynchronize();
-    auto stop = std::chrono::high_resolution_clock::now();
-    auto duration = std::chrono::duration_cast<std::chrono::microseconds>(stop - start).count() / 1000.0;
+    // Perform CPU computation
+    std::cout << "Performing CPU computation..." << std::endl;
+    CudaTimer cpuTimer;
+    cpuTimer.start();
+    reductionCpu(h_in, h_out_cpu, N);
+    cpuTimer.stop();
+    float cpuDuration = cpuTimer.getElapsedMilliseconds();
+    std::cout << "CPU reduction time: " << cpuDuration << " ms" << std::endl;
 
-    // Copy output to host
-    CHECK_CUDA(cudaMemcpy(h_out, d_out, (N + BLOCK_SIZE - 1) / BLOCK_SIZE * sizeof(int), cudaMemcpyDeviceToHost));
+    // Perform GPU computation
+    std::cout << "Performing GPU computation..." << std::endl;
+    CudaTimer gpuTimer;
+    gpuTimer.start();
+    reductionGpu<BLOCK_SIZE><<<numBlocks, BLOCK_SIZE, BLOCK_SIZE * sizeof(int)>>>(d_in, d_out, N);
+    CHECK_CUDA(cudaDeviceSynchronize());
+    gpuTimer.stop();
+    float gpuDuration = gpuTimer.getElapsedMilliseconds();
+    std::cout << "GPU reduction time: " << gpuDuration << " ms" << std::endl;
+    std::cout << "Effective bandwidth: " << (bytes / gpuDuration / 1e6) << " GB/s" << std::endl;
+    std::cout << "Speedup: " << (cpuDuration / gpuDuration) << "x" << std::endl;
+    // Copy data from device to host
+    CHECK_CUDA(cudaMemcpy(h_out_gpu, d_out, (N + BLOCK_SIZE - 1) / BLOCK_SIZE * sizeof(int), cudaMemcpyDeviceToHost));
 
-    // Final reduction on the host
-    int finalResult = h_out[0];
+    // Final reductionGpu on the host
+    int finalResult = h_out_gpu[0];
     for (int i = 1; i < (N + BLOCK_SIZE - 1) / BLOCK_SIZE; ++i)
     {
-        finalResult += h_out[i];
+        finalResult += h_out_gpu[i];
     }
 
+    // Check results
+    checkResult(h_out_cpu[0], finalResult);
+
     // Print results
-    double bandwidth = (duration > 0) ? (bytes / duration / 1e6) : 0;
     std::cout << "Reduced result: " << finalResult << std::endl;
-    std::cout << "Time elapsed: " << duration << " ms" << std::endl;
-    std::cout << "Effective bandwidth: " << bandwidth << " GB/s" << std::endl;
 
     // Free Memory
     delete[] (h_in);
-    delete[] (h_out);
+    delete[] (h_out_cpu);
+    delete[] (h_out_gpu);
     CHECK_CUDA(cudaFree(d_in));
     CHECK_CUDA(cudaFree(d_out));
 
