@@ -1,6 +1,3 @@
-#include <iostream>
-#include <stdlib.h>
-
 template <unsigned int blockSize>
 __device__ void warpReduce(volatile int *sdata, unsigned int tid)
 {
@@ -65,6 +62,6 @@ __global__ void reductionGpu(int *g_in_data, int *g_out_data, unsigned int n)
 
     if (tid == 0)
     {
-        g_out_data[blockIdx.x] = sdata[0];
+        atomicAdd(&g_out_data[0], sdata[0]);
     }
 }
