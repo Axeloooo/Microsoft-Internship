@@ -1,41 +1,36 @@
 #pragma once
 
-#include <iostream>
 #include <cuda_runtime.h>
 
-class CudaTimer
+typedef struct
 {
-private:
     cudaEvent_t startEvent, stopEvent;
     float elapsedMs;
+} CudaTimer;
 
-public:
-    CudaTimer() : elapsedMs(0.0f)
-    {
-        cudaEventCreate(&startEvent);
-        cudaEventCreate(&stopEvent);
-    }
+void startTimer(CudaTimer *timer)
+{
+    cudaEventCreate(&timer->startEvent);
+    cudaEventCreate(&timer->stopEvent);
+    timer->elapsedMs = 0.0f;
+    cudaEventRecord(timer->startEvent);
+}
 
-    ~CudaTimer()
-    {
-        cudaEventDestroy(startEvent);
-        cudaEventDestroy(stopEvent);
-    }
+void stopTimer(CudaTimer *timer)
+{
+    cudaEventRecord(timer->stopEvent);
+    cudaEventSynchronize(timer->stopEvent);
+    cudaEventElapsedTime(&timer->elapsedMs, timer->startEvent, timer->stopEvent);
+}
 
-    void start()
-    {
-        cudaEventRecord(startEvent);
-    }
+void printTimer(const CudaTimer *timer, const size_t *bytes)
+{
+    printf("Reduction time: %f ms\n", timer->elapsedMs);
+    printf("Effective bandwidth: %f GB/s\n", (double)(*bytes) / (timer->elapsedMs) / 1e6);
+}
 
-    void stop()
-    {
-        cudaEventRecord(stopEvent);
-        cudaEventSynchronize(stopEvent);
-        cudaEventElapsedTime(&elapsedMs, startEvent, stopEvent);
-    }
-
-    float getElapsedMilliseconds() const
-    {
-        return elapsedMs;
-    }
-};
+void destroyTimer(CudaTimer *timer)
+{
+    cudaEventDestroy(timer->startEvent);
+    cudaEventDestroy(timer->stopEvent);
+}
