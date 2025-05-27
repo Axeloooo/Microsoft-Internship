@@ -42,6 +42,7 @@ void reductionCpu(int *h_in_data, int *h_out_data, unsigned int n)
 int main()
 {
     size_t bytes = N * sizeof(int);
+    const int gridDim = (N + BLOCK_SIZE - 1) / BLOCK_SIZE;
     const int numBlocks = (N + (2 * BLOCK_SIZE) - 1) / (2 * BLOCK_SIZE);
 
     int *h_in = (int *)malloc(N * sizeof(int));
@@ -64,7 +65,12 @@ int main()
     for (int i = 0; i < 3; i++)
     {
         CHECK_CUDA(cudaMemset(d_out, 0, sizeof(int)));
-        reductionGpu<BLOCK_SIZE><<<numBlocks, BLOCK_SIZE, BLOCK_SIZE * sizeof(int)>>>(d_in, d_out, N);
+        naiveReduce<<<gridDim, BLOCK_SIZE, BLOCK_SIZE * sizeof(int)>>>(d_in, d_out);
+        CHECK_CUDA(cudaGetLastError());
+        CHECK_CUDA(cudaDeviceSynchronize());
+
+        CHECK_CUDA(cudaMemset(d_out, 0, sizeof(int)));
+        multipleElementsReduce<BLOCK_SIZE><<<numBlocks, BLOCK_SIZE, BLOCK_SIZE * sizeof(int)>>>(d_in, d_out, N);
         CHECK_CUDA(cudaGetLastError());
         CHECK_CUDA(cudaDeviceSynchronize());
     }
@@ -77,15 +83,15 @@ int main()
     stopTimer(&cpuTimer);
     printTimer(&cpuTimer, &bytes);
 
-    // Perform GPU computation
-    printf("Performing GPU computation...\n");
-    CudaTimer gpuTimer;
-    startTimer(&gpuTimer);
+    // Perform naive reduce GPU computation
+    printf("Performing naive reduce GPU computation...\n");
+    CudaTimer naiveReduceTimer;
+    startTimer(&naiveReduceTimer);
     CHECK_CUDA(cudaMemset(d_out, 0, sizeof(int)));
-    reductionGpu<BLOCK_SIZE><<<numBlocks, BLOCK_SIZE, BLOCK_SIZE * sizeof(int)>>>(d_in, d_out, N);
+    naiveReduce<<<gridDim, BLOCK_SIZE, BLOCK_SIZE * sizeof(int)>>>(d_in, d_out);
     CHECK_CUDA(cudaDeviceSynchronize());
-    stopTimer(&gpuTimer);
-    printTimer(&gpuTimer, &bytes);
+    stopTimer(&naiveReduceTimer);
+    printTimer(&naiveReduceTimer, &bytes);
 
     // Copy data from device to host
     CHECK_CUDA(cudaMemcpy(h_out_gpu, d_out, sizeof(int), cudaMemcpyDeviceToHost));
@@ -93,12 +99,26 @@ int main()
     // Check results
     checkResult(&h_out_cpu[0], &h_out_gpu[0]);
 
-    // Print results
-    printf("Reduced result: %d\n", h_out_gpu[0]);
+    // Perform multiple elements reduce GPU computation
+    printf("Performing multiple elements reduce GPU computation...\n");
+    CudaTimer multipleElementsReduceTimer;
+    startTimer(&multipleElementsReduceTimer);
+    CHECK_CUDA(cudaMemset(d_out, 0, sizeof(int)));
+    multipleElementsReduce<BLOCK_SIZE><<<numBlocks, BLOCK_SIZE, BLOCK_SIZE * sizeof(int)>>>(d_in, d_out, N);
+    CHECK_CUDA(cudaDeviceSynchronize());
+    stopTimer(&multipleElementsReduceTimer);
+    printTimer(&multipleElementsReduceTimer, &bytes);
 
-    // Destroy timers
+    // Copy data from device to host
+    CHECK_CUDA(cudaMemcpy(h_out_gpu, d_out, sizeof(int), cudaMemcpyDeviceToHost));
+
+    // Check results
+    checkResult(&h_out_cpu[0], &h_out_gpu[0]);
+
+    // Destroy CUDA timers
     destroyTimer(&cpuTimer);
-    destroyTimer(&gpuTimer);
+    destroyTimer(&naiveReduceTimer);
+    destroyTimer(&multipleElementsReduceTimer);
 
     // Free Memory
     free(h_in);

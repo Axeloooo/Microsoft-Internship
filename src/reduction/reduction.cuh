@@ -1,3 +1,26 @@
+__global__ void naiveReduce(int *g_in_data, int *g_out_data)
+{
+    extern __shared__ int sdata[];
+
+    unsigned int tid = threadIdx.x;
+    unsigned int i = blockIdx.x * blockDim.x + threadIdx.x;
+    sdata[tid] = g_in_data[i];
+    __syncthreads();
+
+    for (unsigned int stride = 1; stride < blockDim.x; stride *= 2)
+    {
+        if (tid % (2 * stride) == 0)
+        {
+            sdata[tid] += sdata[tid + stride];
+        }
+        __syncthreads();
+    }
+    if (tid == 0)
+    {
+        atomicAdd(&g_out_data[0], sdata[0]);
+    }
+}
+
 template <unsigned int blockSize>
 __device__ void warpReduce(volatile int *sdata, unsigned int tid)
 {
@@ -16,7 +39,7 @@ __device__ void warpReduce(volatile int *sdata, unsigned int tid)
 }
 
 template <int blockSize>
-__global__ void reductionGpu(int *g_in_data, int *g_out_data, unsigned int n)
+__global__ void multipleElementsReduce(int *g_in_data, int *g_out_data, unsigned int n)
 {
     extern __shared__ int sdata[];
 
