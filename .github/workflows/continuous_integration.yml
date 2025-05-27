@@ -1,0 +1,30 @@
+name: Continuous Integration
+
+on:
+  pull_request:
+    branches:
+      - devel
+      - main
+
+jobs:
+  build:
+    name: Build and Compile
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install CUDA
+        uses: Jimver/cuda-toolkit@v0.2.15
+        with:
+          cuda: "12.2.0"
+
+      - name: Build reduction
+        run: |
+          cd src/reduction
+          make build
+
+      - name: Build vector_add
+        run: |
+          cd src/vector_add
+          make build
