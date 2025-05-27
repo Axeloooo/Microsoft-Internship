@@ -26,7 +26,7 @@ jobs:
           cd src/reduction
           make build
 
-      - name: Build vector_add
+      - name: Build vector add
         run: |
           cd src/vector_add
           make build
