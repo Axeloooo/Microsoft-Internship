@@ -25,8 +25,8 @@ void stopTimer(CudaTimer *timer)
 
 void printTimer(const CudaTimer *timer, const size_t *bytes)
 {
-    printf("Reduction time: %f ms\n", timer->elapsedMs);
-    printf("Effective bandwidth: %f GB/s\n", (double)(*bytes) / (timer->elapsedMs) / 1e6);
+    printf("Computation time: %f ms\n", timer->elapsedMs);
+    printf("Effective bandwidth: %f GB/s\n\n", (double)(*bytes) / (timer->elapsedMs) / 1e6);
 }
 
 void destroyTimer(CudaTimer *timer)
