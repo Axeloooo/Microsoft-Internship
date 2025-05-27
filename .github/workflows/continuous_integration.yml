@@ -19,6 +19,7 @@ jobs:
         id: cuda-toolkit
         with:
           cuda: "12.5.0"
+          method: "network"
 
       - name: Build reduction
         run: |
