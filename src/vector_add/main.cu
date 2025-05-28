@@ -1,6 +1,5 @@
-#include <stdio.h>
-#include <stdlib.h>
-#include <math.h>
+#include <iostream>
+#include <cmath>
 #include <cuda_runtime.h>
 
 #include "timer.cuh"
@@ -15,25 +14,27 @@ void initData(float *vector, int n)
     srand(42);
     for (int i = 0; i < n; i++)
     {
-        vector[i] = (float)rand() / RAND_MAX;
+        vector[i] = static_cast<float>(rand()) / RAND_MAX;
     }
 }
 
-void checkResult(float *a, float *b, float *c, int n)
+void checkResult(const float *a, const float *b, const float *c, int n)
 {
     for (int i = 0; i < n; i++)
     {
-        if (fabs(c[i] - (a[i] + b[i])) > 1e-5)
+        if (std::fabs(c[i] - (a[i] + b[i])) > 1e-5)
         {
-            fprintf(stderr, "Results do not match!\n");
-            fprintf(stderr, "Error at index %d: %f != %f\n", i, c[i], a[i] + b[i]);
+            std::cerr << "Results do not match!" << std::endl;
+            std::cerr << "Error at index " << i << ": " << c[i] << " != " << a[i] + b[i] << "\n"
+                      << std::endl;
             return;
         }
     }
-    printf("Results are correct!\n");
+    std::cout << "Results are correct!" << "\n"
+              << std::endl;
 }
 
-void vectorAddCpu(float *a, float *b, float *c, int n)
+void vectorAddCpu(const float *a, const float *b, float *c, int n)
 {
     for (int i = 0; i < n; i++)
     {
@@ -43,12 +44,12 @@ void vectorAddCpu(float *a, float *b, float *c, int n)
 
 int main()
 {
-    size_t bytes = N * sizeof(int);
+    size_t bytes = N * sizeof(float);
 
-    float *h_a = (float *)malloc(N * sizeof(float));
-    float *h_b = (float *)malloc(N * sizeof(float));
-    float *h_c_cpu = (float *)malloc(N * sizeof(float));
-    float *h_c_gpu = (float *)malloc(N * sizeof(float));
+    float *h_a = new float[N];
+    float *h_b = new float[N];
+    float *h_c_cpu = new float[N];
+    float *h_c_gpu = new float[N];
 
     initData(h_a, N);
     initData(h_b, N);
@@ -64,30 +65,31 @@ int main()
     CHECK_CUDA(cudaMemcpy(d_a, h_a, bytes, cudaMemcpyHostToDevice));
     CHECK_CUDA(cudaMemcpy(d_b, h_b, bytes, cudaMemcpyHostToDevice));
 
+    // Perform CPU computation
+    CudaTimer cpuTimer;
+    cpuTimer.start();
+    vectorAddCpu(h_a, h_b, h_c_cpu, N);
+    cpuTimer.stop();
+    cpuTimer.print(&bytes, "CPU");
+    std::cout << "CPU computation done." << "\n"
+              << std::endl;
+
     // Perform warm up
-    printf("Warming up...\n");
+    std::cout << "Warming up GPUs..." << "\n"
+              << std::endl;
     for (int i = 0; i < 3; i++)
     {
         vectorAddGpu<<<(N + BLOCK_SIZE - 1) / BLOCK_SIZE, BLOCK_SIZE>>>(d_a, d_b, d_c, N);
+        CHECK_CUDA(cudaDeviceSynchronize());
     }
-    CHECK_CUDA(cudaDeviceSynchronize());
-
-    // Perform CPU computation
-    printf("Performing CPU computation...\n");
-    CudaTimer cpuTimer;
-    startTimer(&cpuTimer);
-    vectorAddCpu(h_a, h_b, h_c_cpu, N);
-    stopTimer(&cpuTimer);
-    printTimer(&cpuTimer, &bytes);
 
     // Perform GPU computation
-    printf("Performing GPU computation...\n");
     CudaTimer gpuTimer;
-    startTimer(&gpuTimer);
+    gpuTimer.start();
     vectorAddGpu<<<(N + BLOCK_SIZE - 1) / BLOCK_SIZE, BLOCK_SIZE>>>(d_a, d_b, d_c, N);
     CHECK_CUDA(cudaDeviceSynchronize());
-    stopTimer(&gpuTimer);
-    printTimer(&gpuTimer, &bytes);
+    gpuTimer.stop();
+    gpuTimer.print(&bytes, "GPU");
 
     // Copy data from device to host
     CHECK_CUDA(cudaMemcpy(h_c_gpu, d_c, bytes, cudaMemcpyDeviceToHost));
@@ -95,15 +97,11 @@ int main()
     // Check results
     checkResult(h_a, h_b, h_c_gpu, N);
 
-    // Destroy timers
-    destroyTimer(&cpuTimer);
-    destroyTimer(&gpuTimer);
-
     // Free memory
-    free(h_a);
-    free(h_b);
-    free(h_c_cpu);
-    free(h_c_gpu);
+    delete[] h_a;
+    delete[] h_b;
+    delete[] h_c_cpu;
+    delete[] h_c_gpu;
     CHECK_CUDA(cudaFree(d_a));
     CHECK_CUDA(cudaFree(d_b));
     CHECK_CUDA(cudaFree(d_c));

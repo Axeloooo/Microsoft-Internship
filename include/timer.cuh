@@ -1,36 +1,45 @@
 #pragma once
 
 #include <cuda_runtime.h>
+#include <iostream>
+#include <string>
 
-typedef struct
+class CudaTimer
 {
+private:
     cudaEvent_t startEvent, stopEvent;
     float elapsedMs;
-} CudaTimer;
 
-void startTimer(CudaTimer *timer)
-{
-    cudaEventCreate(&timer->startEvent);
-    cudaEventCreate(&timer->stopEvent);
-    timer->elapsedMs = 0.0f;
-    cudaEventRecord(timer->startEvent);
-}
+public:
+    CudaTimer() : elapsedMs(0.0f)
+    {
+        cudaEventCreate(&startEvent);
+        cudaEventCreate(&stopEvent);
+    }
 
-void stopTimer(CudaTimer *timer)
-{
-    cudaEventRecord(timer->stopEvent);
-    cudaEventSynchronize(timer->stopEvent);
-    cudaEventElapsedTime(&timer->elapsedMs, timer->startEvent, timer->stopEvent);
-}
+    ~CudaTimer()
+    {
+        cudaEventDestroy(startEvent);
+        cudaEventDestroy(stopEvent);
+    }
 
-void printTimer(const CudaTimer *timer, const size_t *bytes)
-{
-    printf("Computation time: %f ms\n", timer->elapsedMs);
-    printf("Effective bandwidth: %f GB/s\n\n", (double)(*bytes) / (timer->elapsedMs) / 1e6);
-}
+    void start()
+    {
+        elapsedMs = 0.0f;
+        cudaEventRecord(startEvent);
+    }
 
-void destroyTimer(CudaTimer *timer)
-{
-    cudaEventDestroy(timer->startEvent);
-    cudaEventDestroy(timer->stopEvent);
-}
+    void stop()
+    {
+        cudaEventRecord(stopEvent);
+        cudaEventSynchronize(stopEvent);
+        cudaEventElapsedTime(&elapsedMs, startEvent, stopEvent);
+    }
+
+    void print(const size_t *bytes, const std::string &label) const
+    {
+        std::cout << label << ":" << std::endl;
+        std::cout << "Computation time: " << elapsedMs << " ms" << std::endl;
+        std::cout << "Effective bandwidth: " << (static_cast<double>(*bytes) / elapsedMs / 1e6) << " GB/s" << std::endl;
+    }
+};

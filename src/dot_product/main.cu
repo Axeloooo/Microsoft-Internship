@@ -1,6 +1,8 @@
-#include <stdio.h>
+#include <iostream>
 #include <cuda_runtime.h>
 #include <cublas_v2.h>
+#include <cmath>
+#include <cstdlib>
 
 #include "timer.cuh"
 #include "checker.cuh"
@@ -12,24 +14,26 @@ void initData(float *vector, int n)
     srand(42);
     for (int i = 0; i < n; i++)
     {
-        vector[i] = (float)rand() / RAND_MAX;
+        vector[i] = static_cast<float>(rand()) / RAND_MAX;
     }
 }
 
-void checkResult(float *cpuResult, float *gpuResult)
+void checkResult(const float &cpuResult, const float &gpuResult)
 {
-    float diff = fabs(*cpuResult - *gpuResult);
-    float relError = diff / fabs(*cpuResult);
-    if (relError > 1e-3) // using relative tolerance 0.1%
+    float diff = std::fabs(cpuResult - gpuResult);
+    float relError = diff / std::fabs(cpuResult);
+    if (relError > 1e-3)
     {
-        fprintf(stderr, "Results do not match!\n");
-        fprintf(stderr, "CPU result: %f, GPU result: %f (relative error: %f)\n", *cpuResult, *gpuResult, relError);
+        std::cerr << "Results do not match!" << std::endl;
+        std::cerr << "CPU result: " << cpuResult << ", GPU result: " << gpuResult << " (relative error: " << relError << ")" << "\n"
+                  << std::endl;
         exit(EXIT_FAILURE);
     }
-    printf("Results are correct!\n");
+    std::cout << "Results are correct!" << "\n"
+              << std::endl;
 }
 
-void dotProductCpu(float *a, float *b, float *c, int n)
+void dotProductCpu(const float *a, const float *b, float *c, int n)
 {
     double sum = 0.0;
     for (int i = 0; i < n; ++i)
@@ -41,8 +45,8 @@ int main()
 {
     size_t bytes = N * sizeof(float);
 
-    float *h_a = (float *)malloc(bytes);
-    float *h_b = (float *)malloc(bytes);
+    float *h_a = new float[N];
+    float *h_b = new float[N];
     float h_c_cpu, h_c_gpu;
 
     // Initialize data
@@ -64,35 +68,40 @@ int main()
     CHECK_CUDA(cudaMemcpy(d_b, h_b, bytes, cudaMemcpyHostToDevice));
 
     // Perform CPU computation
-    printf("Performing CPU computation...\n");
     CudaTimer cpuTimer;
-    startTimer(&cpuTimer);
+    cpuTimer.start();
     dotProductCpu(h_a, h_b, &h_c_cpu, N);
-    stopTimer(&cpuTimer);
-    printTimer(&cpuTimer, &bytes);
+    cpuTimer.stop();
+    cpuTimer.print(&bytes, "CPU");
+    std::cout << "CPU result: " << h_c_cpu << "\n"
+              << std::endl;
+
+    // Perform warm up
+    std::cout << "Warming up GPUs..." << "\n"
+              << std::endl;
+    for (int i = 0; i < 3; ++i)
+    {
+        CHECK_CUBLAS(cublasSdot(cublasHandle, N, d_a, 1, d_b, 1, &h_c_gpu));
+        CHECK_CUDA(cudaDeviceSynchronize());
+    }
 
     // Perform GPU computation
-    printf("Performing GPU computation...\n");
     CudaTimer gpuTimer;
-    startTimer(&gpuTimer);
+    gpuTimer.start();
     CHECK_CUBLAS(cublasSdot(cublasHandle, N, d_a, 1, d_b, 1, &h_c_gpu));
     CHECK_CUDA(cudaDeviceSynchronize());
-    stopTimer(&gpuTimer);
-    printTimer(&gpuTimer, &bytes);
+    gpuTimer.stop();
+    gpuTimer.print(&bytes, "GPU");
 
     // Check results
-    checkResult(&h_c_cpu, &h_c_gpu);
-
-    // Destroy timers
-    destroyTimer(&cpuTimer);
-    destroyTimer(&gpuTimer);
+    checkResult(h_c_cpu, h_c_gpu);
 
     // Destroy cuBLAS handle
     CHECK_CUBLAS(cublasDestroy(cublasHandle));
 
     // Free memory
-    free(h_a);
-    free(h_b);
+    delete[] h_a;
+    delete[] h_b;
     CHECK_CUDA(cudaFree(d_a));
     CHECK_CUDA(cudaFree(d_b));
 
