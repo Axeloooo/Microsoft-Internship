@@ -30,3 +30,13 @@ jobs:
         run: |
           cd src/vector_add
           make build
+
+      - name: Build dot product
+        run: |
+          cd src/dot_product
+          make build
+
+      - name: Build axpy
+        run: |
+          cd src/axpy
+          make build
