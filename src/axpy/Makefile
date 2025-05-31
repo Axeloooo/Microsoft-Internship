@@ -2,7 +2,7 @@
 build:
 	@echo "Building axpy module..."
 	mkdir -p ../../build
-	nvcc -I ../../include -o ../../build/axpy main.cu -lcublas
+	nvcc -I ../../include -arch=sm_90 -o ../../build/axpy main.cu -lcublas
 
 .PHONY: run
 run: build

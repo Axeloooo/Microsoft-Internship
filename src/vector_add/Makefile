@@ -2,7 +2,7 @@
 build:
 	@echo "Building vector_add module..."
 	mkdir -p ../../build
-	nvcc -I ../../include -o ../../build/vector_add main.cu
+	nvcc -I ../../include -arch=sm_90 -o ../../build/vector_add main.cu
 
 .PHONY: run
 run: build

@@ -15,12 +15,10 @@ void checkResult(const int &cpuResult, const int &gpuResult)
     if (std::fabs(cpuResult - gpuResult) > 1e-5)
     {
         std::cerr << "Results do not match!" << std::endl;
-        std::cerr << "CPU result: " << cpuResult << ", GPU result: " << gpuResult << "\n"
-                  << std::endl;
+        std::cerr << "CPU result: " << cpuResult << ", GPU result: " << gpuResult << std::endl;
         std::exit(EXIT_FAILURE);
     }
-    std::cout << "Results are correct!" << "\n"
-              << std::endl;
+    std::cout << "Results are correct!" << std::endl;
 }
 
 void reductionCpu(const int *h_in_data, int *h_out_data, unsigned int n)
@@ -63,8 +61,7 @@ int main()
     cpuTimer.print();
 
     // Perfom warm up
-    std::cout << "Warming up GPUs..." << "\n"
-              << std::endl;
+    std::cout << "Warming up GPUs..." << std::endl;
     for (int i = 0; i < 3; i++)
     {
         CHECK_CUDA(cudaMemset(d_out, 0, sizeof(int)));

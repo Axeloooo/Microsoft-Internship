@@ -15,9 +15,10 @@ void checkVector(const T *d_y, const T *h_y, size_t n)
     {
         if (fabs(d_y[i] - h_y[i]) > 1e-5)
         {
+            std::cerr << "Results do not match!" << std::endl;
             std::cerr << "Data mismatch at index " << i << ": " << d_y[i] << " != " << h_y[i] << std::endl;
             return;
         }
     }
-    std::cout << "Data check passed!" << std::endl;
+    std::cout << "Results are correct!" << std::endl;
 }

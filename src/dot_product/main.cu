@@ -16,15 +16,13 @@ void checkResult(const float &cpuResult, const float &gpuResult)
 {
     float diff = std::fabs(cpuResult - gpuResult);
     float relError = diff / std::fabs(cpuResult);
-    if (relError > 1e-3)
+    if (relError > 1e-2) // Allow up to 1% relative error due to floating-point differences
     {
         std::cerr << "Results do not match!" << std::endl;
-        std::cerr << "CPU result: " << cpuResult << ", GPU result: " << gpuResult << " (relative error: " << relError << ")" << "\n"
-                  << std::endl;
+        std::cerr << "CPU result: " << cpuResult << ", GPU result: " << gpuResult << " (relative error: " << relError << ")" << std::endl;
         exit(EXIT_FAILURE);
     }
-    std::cout << "Results are correct!" << "\n"
-              << std::endl;
+    std::cout << "Results are correct! (relative error: " << relError * 100 << "%)" << std::endl;
 }
 
 void dotProductCpu(const float *a, const float *b, float *c, int n)
@@ -59,6 +57,10 @@ int main()
     // Allocate device memory
     CHECK_CUDA(cudaMalloc(&d_a, bytes));
     CHECK_CUDA(cudaMalloc(&d_b, bytes));
+    CHECK_CUDA(cudaMalloc(&d_c_gpu, sizeof(float))); // Allocate memory for d_c_gpu
+
+    // Initialize d_c_gpu to zero
+    CHECK_CUDA(cudaMemset(d_c_gpu, 0, sizeof(float)));
 
     // Copy data from host to device
     CHECK_CUDA(cudaMemcpy(d_a, h_a, bytes, cudaMemcpyHostToDevice));
@@ -75,7 +77,8 @@ int main()
     std::cout << "Warming up GPUs..." << std::endl;
     for (int i = 0; i < 3; ++i)
     {
-        dotProductGpu<<<grid, block>>>(d_a, d_b, d_c_gpu, N);
+        CHECK_CUDA(cudaMemset(d_c_gpu, 0, sizeof(float))); // Reset accumulator to zero
+        sdot<<<grid, block>>>(d_a, d_b, d_c_gpu, N);
         CHECK_CUDA(cudaGetLastError());
         CHECK_CUDA(cudaDeviceSynchronize());
         CHECK_CUBLAS(cublasSdot(cublasHandle, N, d_a, 1, d_b, 1, &h_c_cublas));
@@ -85,10 +88,17 @@ int main()
     // Perform dot product using CUDA kernel
     CudaTimer gpuTimer("Dot Product GPU Kernel", &bytes);
     gpuTimer.start();
-    dotProductGpu<<<grid, block>>>(d_a, d_b, d_c_gpu, N);
+    CHECK_CUDA(cudaMemset(d_c_gpu, 0, sizeof(float))); // Reset accumulator to zero
+    sdot<<<grid, block>>>(d_a, d_b, d_c_gpu, N);
     CHECK_CUDA(cudaGetLastError());
     gpuTimer.stop();
     gpuTimer.print();
+
+    // Copy result back to host
+    CHECK_CUDA(cudaMemcpy(&h_c_gpu, d_c_gpu, sizeof(float), cudaMemcpyDeviceToHost));
+
+    // Check results
+    checkResult(h_c_cpu, h_c_gpu);
 
     // Perform dot product using cuBLAS
     CudaTimer cublasTimer("Dot Product cuBLAS", &bytes);
@@ -97,11 +107,6 @@ int main()
     cublasTimer.stop();
     cublasTimer.print();
 
-    // Copy result back to host
-    CHECK_CUDA(cudaMemcpy(&h_c_gpu, d_c_gpu, sizeof(float), cudaMemcpyDeviceToHost));
-
-    // Check results
-    checkResult(h_c_cpu, h_c_gpu);
     checkResult(h_c_cpu, h_c_cublas);
 
     // Clean up

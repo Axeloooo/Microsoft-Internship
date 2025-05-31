@@ -56,7 +56,7 @@ int main()
     std::cout << "Warming up GPUs..." << std::endl;
     for (int i = 0; i < 3; i++)
     {
-        vectorAddGpu<<<grid, block>>>(d_a, d_b, d_c_gpu, N);
+        add<<<grid, block>>>(d_a, d_b, d_c_gpu, N);
         CHECK_CUDA(cudaGetLastError());
         CHECK_CUDA(cudaDeviceSynchronize());
     }
@@ -64,7 +64,7 @@ int main()
     // Perform GPU computation
     CudaTimer gpuTimer("Vector Addition GPU Kernel", &bytes);
     gpuTimer.start();
-    vectorAddGpu<<<grid, block>>>(d_a, d_b, d_c_gpu, N);
+    add<<<grid, block>>>(d_a, d_b, d_c_gpu, N);
     CHECK_CUDA(cudaGetLastError());
     gpuTimer.stop();
     gpuTimer.print();
