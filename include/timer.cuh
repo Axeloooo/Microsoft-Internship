@@ -8,10 +8,12 @@ class CudaTimer
 {
 private:
     cudaEvent_t startEvent, stopEvent;
+    std::string label;
+    size_t bytes;
     float elapsedMs;
 
 public:
-    CudaTimer() : elapsedMs(0.0f)
+    CudaTimer(const std::string &label, const size_t *bytes) : elapsedMs(0.0f), label(label), bytes(*bytes)
     {
         cudaEventCreate(&startEvent);
         cudaEventCreate(&stopEvent);
@@ -36,10 +38,13 @@ public:
         cudaEventElapsedTime(&elapsedMs, startEvent, stopEvent);
     }
 
-    void print(const size_t *bytes, const std::string &label) const
+    void print() const
     {
         std::cout << label << ":" << std::endl;
         std::cout << "Computation time: " << elapsedMs << " ms" << std::endl;
-        std::cout << "Effective bandwidth: " << (static_cast<double>(*bytes) / elapsedMs / 1e6) << " GB/s" << std::endl;
+
+        double bandwidthTBps = static_cast<double>(bytes) / elapsedMs / 1e9;
+
+        std::cout << "Effective bandwidth: " << bandwidthTBps << " TB/s" << std::endl;
     }
 };

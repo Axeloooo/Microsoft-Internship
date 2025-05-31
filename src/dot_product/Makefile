@@ -2,7 +2,7 @@
 build:
 	@echo "Building dot product module..."
 	mkdir -p ../../build
-	nvcc -I ../../include -o ../../build/dot_product main.cu -lcublas
+	nvcc -I ../../include -arch=sm_90 -o ../../build/dot_product main.cu -lcublas
 
 .PHONY: run
 run: build

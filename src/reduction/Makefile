@@ -2,7 +2,7 @@
 build:
 	@echo "Building reduction module..."
 	mkdir -p ../../build
-	nvcc -I ../../include -o ../../build/reduction main.cu
+	nvcc -I ../../include -arch=sm_90 -o ../../build/reduction main.cu
 
 .PHONY: run
 run: build
