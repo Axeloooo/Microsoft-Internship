@@ -83,6 +83,7 @@ int main()
     gpuTimer.start();
     saxpy<<<grid, block>>>(alpha, d_x, d_y_gpu, N);
     CHECK_CUDA(cudaGetLastError());
+    CHECK_CUDA(cudaDeviceSynchronize());
     gpuTimer.stop();
     gpuTimer.print();
 

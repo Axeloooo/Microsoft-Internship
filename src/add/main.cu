@@ -5,7 +5,7 @@
 #include "timer.cuh"
 #include "checker.cuh"
 #include "data.cuh"
-#include "vector_add.cuh"
+#include "add.cuh"
 
 #define N 4194304
 #define BLOCK_SIZE 256
@@ -66,6 +66,7 @@ int main()
     gpuTimer.start();
     add<<<grid, block>>>(d_a, d_b, d_c_gpu, N);
     CHECK_CUDA(cudaGetLastError());
+    CHECK_CUDA(cudaDeviceSynchronize());
     gpuTimer.stop();
     gpuTimer.print();
 
