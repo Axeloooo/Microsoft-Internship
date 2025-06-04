@@ -21,22 +21,5 @@ jobs:
           cuda: "12.5.0"
           method: "network"
 
-      - name: Build reduction
-        run: |
-          cd src/reduction
-          make build
-
-      - name: Build vector add
-        run: |
-          cd src/vector_add
-          make build
-
-      - name: Build dot product
-        run: |
-          cd src/dot_product
-          make build
-
-      - name: Build axpy
-        run: |
-          cd src/axpy
-          make build
+      - name: Build kernels
+        run: make build

@@ -106,6 +106,7 @@ int main()
     CHECK_CUDA(cudaMemset(d_out, 0, sizeof(int)));
     naiveReduce<<<grid, block, BLOCK_SIZE * sizeof(int)>>>(d_in, d_out);
     CHECK_CUDA(cudaGetLastError());
+    CHECK_CUDA(cudaDeviceSynchronize());
     naiveReduceTimer.stop();
     naiveReduceTimer.print();
 
@@ -121,6 +122,7 @@ int main()
     CHECK_CUDA(cudaMemset(d_out, 0, sizeof(int)));
     interleaveAddressingReduce<<<grid, block, BLOCK_SIZE * sizeof(int)>>>(d_in, d_out);
     CHECK_CUDA(cudaGetLastError());
+    CHECK_CUDA(cudaDeviceSynchronize());
     interleavedReduceTimer.stop();
     interleavedReduceTimer.print();
 
@@ -136,6 +138,7 @@ int main()
     CHECK_CUDA(cudaMemset(d_out, 0, sizeof(int)));
     naiveReduce<<<grid, block, BLOCK_SIZE * sizeof(int)>>>(d_in, d_out);
     CHECK_CUDA(cudaGetLastError());
+    CHECK_CUDA(cudaDeviceSynchronize());
     sequenceReduceTimer.stop();
     sequenceReduceTimer.print();
 
@@ -151,6 +154,7 @@ int main()
     CHECK_CUDA(cudaMemset(d_out, 0, sizeof(int)));
     addDuringLoadReduce<<<numBlocks, block, BLOCK_SIZE * sizeof(int)>>>(d_in, d_out);
     CHECK_CUDA(cudaGetLastError());
+    CHECK_CUDA(cudaDeviceSynchronize());
     addDuringLoadReduceTimer.stop();
     addDuringLoadReduceTimer.print();
 
@@ -166,6 +170,7 @@ int main()
     CHECK_CUDA(cudaMemset(d_out, 0, sizeof(int)));
     unrollLastWarpReduce<<<numBlocks, block, BLOCK_SIZE * sizeof(int)>>>(d_in, d_out);
     CHECK_CUDA(cudaGetLastError());
+    CHECK_CUDA(cudaDeviceSynchronize());
     unrollLastWarpReduceTimer.stop();
     unrollLastWarpReduceTimer.print();
 
@@ -181,6 +186,7 @@ int main()
     CHECK_CUDA(cudaMemset(d_out, 0, sizeof(int)));
     completelyUnrollReduce<BLOCK_SIZE><<<numBlocks, block, BLOCK_SIZE * sizeof(int)>>>(d_in, d_out);
     CHECK_CUDA(cudaGetLastError());
+    CHECK_CUDA(cudaDeviceSynchronize());
     completelyUnrolledWarpReduceTimer.stop();
     completelyUnrolledWarpReduceTimer.print();
 
@@ -196,6 +202,7 @@ int main()
     CHECK_CUDA(cudaMemset(d_out, 0, sizeof(int)));
     multipleElementsReduce<BLOCK_SIZE><<<numBlocks, block, BLOCK_SIZE * sizeof(int)>>>(d_in, d_out, N);
     CHECK_CUDA(cudaGetLastError());
+    CHECK_CUDA(cudaDeviceSynchronize());
     multipleElementsReduceTimer.stop();
     multipleElementsReduceTimer.print();
 
