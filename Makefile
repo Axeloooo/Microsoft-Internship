@@ -1,5 +1,5 @@
 # ------------------------------------------------------------------------
-# Root-level Makefile for CUDA modules: reduce, axpy, dot, add
+# Root‐level Makefile for CUDA modules: reduce, axpy, dot, add
 # ------------------------------------------------------------------------
 
 # Compiler and flags
@@ -26,87 +26,72 @@ DOT_BIN     := $(BUILD_DIR)/dot
 ADD_BIN     := $(BUILD_DIR)/add
 
 # ------------------------------------------------------------------------
-# Default target
-# ------------------------------------------------------------------------
-.PHONY: all
-all: build
-
-# ------------------------------------------------------------------------
-# Build each module
+# 1) Top‐level “build” target (for CI)
 # ------------------------------------------------------------------------
 .PHONY: build
 build: $(REDUCE_BIN) $(AXPY_BIN) $(DOT_BIN) $(ADD_BIN)
-
-# Ensure build directory exists
-$(BUILD_DIR):
-	@mkdir -p $(BUILD_DIR)
-
-# Build reduction (no cuBLAS)
-$(REDUCE_BIN): $(REDUCE_SRC) | $(BUILD_DIR)
-	@echo "Building reduction module..."
-	$(NVCC) $(NVCCFLAGS) -o $@ $<
-
-# Build axpy (link against cuBLAS)
-$(AXPY_BIN): $(AXPY_SRC) | $(BUILD_DIR)
-	@echo "Building axpy module..."
-	$(NVCC) $(NVCCFLAGS) $(CUBLAS_LIBS) -o $@ $<
-
-# Build dot product (link against cuBLAS)
-$(DOT_BIN): $(DOT_SRC) | $(BUILD_DIR)
-	@echo "Building dot product module..."
-	$(NVCC) $(NVCCFLAGS) $(CUBLAS_LIBS) -o $@ $<
-
-# Build add (no cuBLAS)
-$(ADD_BIN): $(ADD_SRC) | $(BUILD_DIR)
-	@echo "Building add module..."
-	$(NVCC) $(NVCCFLAGS) -o $@ $<
+	@echo "All modules built. (No execution.)"
 
 # ------------------------------------------------------------------------
-# Run targets (all “run-<module>” depend on the full build first)
+# 2) Per‐module build+run targets
+#
+# Running `make add` will:
+#   1) Build `$(ADD_BIN)` if it’s out of date,
+#   2) Then run `$(ADD_BIN)`.
 # ------------------------------------------------------------------------
-.PHONY: run
-run: run-reduce run-axpy run-dot run-add
-
-.PHONY: run-reduce
-run-reduce: build $(REDUCE_BIN)
-	@echo "Running reduction module..."
-	@$(REDUCE_BIN)
-
-.PHONY: run-axpy
-run-axpy: build $(AXPY_BIN)
-	@echo "Running axpy module..."
-	@$(AXPY_BIN)
-
-.PHONY: run-dot
-run-dot: build $(DOT_BIN)
-	@echo "Running dot product module..."
-	@$(DOT_BIN)
-
-.PHONY: run-add
-run-add: build $(ADD_BIN)
-	@echo "Running add module..."
+.PHONY: add
+add: $(ADD_BIN)
+	@echo "Running add module…"
 	@$(ADD_BIN)
 
-# For convenience, you can also invoke “make reduce” instead of “make run-reduce”
-# Each of these will build everything first, then run just that one binary.
-.PHONY: reduce
-reduce: run-reduce
-
 .PHONY: axpy
-axpy: run-axpy
+axpy: $(AXPY_BIN)
+	@echo "Running axpy module…"
+	@$(AXPY_BIN)
 
 .PHONY: dot
-dot: run-dot
+dot: $(DOT_BIN)
+	@echo "Running dot product module…"
+	@$(DOT_BIN)
 
-.PHONY: add
-add: run-add
+.PHONY: reduce
+reduce: $(REDUCE_BIN)
+	@echo "Running reduction module…"
+	@$(REDUCE_BIN)
 
 # ------------------------------------------------------------------------
-# Clean up
+# 3) Rules to compile each binary
+#
+# Notice: instead of having a separate “mkdir $(BUILD_DIR)” target,
+# we do `@mkdir -p $(BUILD_DIR)` inline in each rule. This removes
+# any ambiguity between a phony “build” target and a real “build” folder.
+# ------------------------------------------------------------------------
+$(REDUCE_BIN): $(REDUCE_SRC)
+	@echo "Building reduction module…"
+	@mkdir -p $(BUILD_DIR)
+	$(NVCC) $(NVCCFLAGS) -o $@ $<
+
+$(AXPY_BIN): $(AXPY_SRC)
+	@echo "Building axpy module…"
+	@mkdir -p $(BUILD_DIR)
+	$(NVCC) $(NVCCFLAGS) $(CUBLAS_LIBS) -o $@ $<
+
+$(DOT_BIN): $(DOT_SRC)
+	@echo "Building dot product module…"
+	@mkdir -p $(BUILD_DIR)
+	$(NVCC) $(NVCCFLAGS) $(CUBLAS_LIBS) -o $@ $<
+
+$(ADD_BIN): $(ADD_SRC)
+	@echo "Building add module…"
+	@mkdir -p $(BUILD_DIR)
+	$(NVCC) $(NVCCFLAGS) -o $@ $<
+
+# ------------------------------------------------------------------------
+# 4) Clean everything
 # ------------------------------------------------------------------------
 .PHONY: clean
 clean:
-	@echo "Cleaning up build files..."
+	@echo "Cleaning up build files…"
 	@rm -rf $(BUILD_DIR)
 
 # ------------------------------------------------------------------------
