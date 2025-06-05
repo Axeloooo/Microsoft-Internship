@@ -82,10 +82,12 @@ int main()
         naiveSdot<<<grid, block>>>(d_a, d_b, d_c_gpu, N);
         CHECK_CUDA(cudaGetLastError());
         CHECK_CUDA(cudaDeviceSynchronize());
+
         CHECK_CUDA(cudaMemset(d_c_gpu, 0, sizeof(float)));
         optimizedSdot<BLOCK_SIZE><<<optimGrid, block, BLOCK_SIZE * sizeof(float)>>>(d_a, d_b, d_c_gpu, N);
         CHECK_CUDA(cudaGetLastError());
         CHECK_CUDA(cudaDeviceSynchronize());
+
         CHECK_CUBLAS(cublasSdot(cublasHandle, N, d_a, 1, d_b, 1, &h_c_cublas));
         CHECK_CUDA(cudaDeviceSynchronize());
     }
