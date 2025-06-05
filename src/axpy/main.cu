@@ -28,6 +28,7 @@ int main()
     dim3 grid((N + BLOCK_SIZE - 1) / BLOCK_SIZE);
 
     size_t bytes = N * sizeof(float);
+    size_t totalBytes = 2 * bytes;
 
     float alpha = 2.0f;
 
@@ -57,7 +58,7 @@ int main()
     CHECK_CUDA(cudaMemcpy(d_y_cublas, h_y_cublas, bytes, cudaMemcpyHostToDevice));
 
     // Perform AXPY on CPU
-    CudaTimer cpuTimer("AXPY CPU", &bytes);
+    CudaTimer cpuTimer("AXPY CPU", &totalBytes);
     cpuTimer.start();
     axpyCpu(alpha, h_x, h_y_cpu, N);
     cpuTimer.stop();
@@ -79,7 +80,7 @@ int main()
     CHECK_CUDA(cudaMemcpy(d_y_cublas, h_y_init, bytes, cudaMemcpyHostToDevice));
 
     // Perform AXPY using CUDA kernel
-    CudaTimer gpuTimer("AXPY GPU Kernel", &bytes);
+    CudaTimer gpuTimer("AXPY GPU Kernel", &totalBytes);
     gpuTimer.start();
     saxpy<<<grid, block>>>(alpha, d_x, d_y_gpu, N);
     CHECK_CUDA(cudaGetLastError());
@@ -94,7 +95,7 @@ int main()
     checkVector<float>(h_y_gpu, h_y_cpu, N);
 
     // Perform AXPY using cuBLAS
-    CudaTimer cublasTimer("AXPY cuBLAS", &bytes);
+    CudaTimer cublasTimer("AXPY cuBLAS", &totalBytes);
     cublasTimer.start();
     CHECK_CUBLAS(cublasSaxpy(cublasHandle, N, &alpha, d_x, 1, d_y_cublas, 1));
     cublasTimer.stop();
