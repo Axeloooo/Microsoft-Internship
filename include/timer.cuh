@@ -41,10 +41,10 @@ public:
     void print() const
     {
         std::cout << label << ":" << std::endl;
-        std::cout << "Computation time: " << elapsedMs << " ms" << std::endl;
+        std::cout << "Latency: " << elapsedMs << " ms" << std::endl;
 
         double bandwidthTBps = static_cast<double>(bytes) / elapsedMs / 1e9;
 
-        std::cout << "Effective bandwidth: " << bandwidthTBps << " TB/s" << std::endl;
+        std::cout << "Bandwidth: " << bandwidthTBps << " TB/s" << std::endl;
     }
 };

@@ -147,7 +147,7 @@ __device__ void warpTemplateReduce(volatile int *sdata, unsigned int tid)
         sdata[tid] += sdata[tid + 1];
 }
 
-template <unsigned int blockSize> // Dependency on block configuration issue
+template <unsigned int blockSize>
 __global__ void completelyUnrollReduce(int *g_in_data, int *g_out_data)
 {
     extern __shared__ int sdata[];

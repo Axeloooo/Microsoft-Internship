@@ -28,40 +28,40 @@ All benchmarks were run on a system with the following specifications:
 
 - AXPY:
 
-| Kernel       | Time (ms) | Bandwith (TB/s) |
-| ------------ | --------- | --------------- |
-| CPU          | 5.85363   | 0.00286612      |
-| Naive Kernel | 0.026656  | 0.629397        |
-| cuBLAS       | 0.025312  | 0.662817        |
+| Kernel     | Latency (ms) | Bandwidth (TB/s) | % of cuBLAS |
+| ---------- | ------------ | ---------------- | ----------- |
+| CPU        | 5.82874      | 0.00575673       | 0.43%       |
+| GPU Kernel | 0.026912     | 1.24682          | 95.24 %     |
+| cuBLAS     | 0.025632     | 1.30908          | 100 %       |
 
 - Vector Addition:
 
-| Kernel       | Time (ms) | Bandwith (TB/s) |
-| ------------ | --------- | --------------- |
-| CPU          | 15.2313   | 0.0011015       |
-| Naive Kernel | 0.023456  | 0.715263        |
+| Kernel     | Latency (ms) | Bandwidth (TB/s) | % of cuBLAS |
+| ---------- | ------------ | ---------------- | ----------- |
+| CPU        | 14.2268      | 0.0035378        | N/A         |
+| GPU Kernel | 0.026176     | 1.92282          | N/A         |
 
 - Parallel Reduction:
 
-| Kernel                              | Time (ms) | Bandwith (TB/s) |
-| ----------------------------------- | --------- | --------------- |
-| CPU                                 | 4.43878   | 0.00377969      |
-| Naive Reduce GPU                    | 0.050048  | 0.335222        |
-| Interleaved Addressing Reduce GPU   | 0.035648  | 0.470636        |
-| Sequence Addressing Reduce GPU      | 0.050016  | 0.335437        |
-| Add During Load Reduce GPU          | 0.019872  | 0.844264        |
-| Unroll Last Warp Reduce GPU         | 0.018656  | 0.899293        |
-| Completely Unrolled Warp Reduce GPU | 0.01792   | 0.936229        |
-| Multiple Elements Reduce GPU        | 0.01888   | 0.888624        |
+| Kernel                              | Latency (ms) | Bandwidth (TB/s) | % of cuBLAS |
+| ----------------------------------- | ------------ | ---------------- | ----------- |
+| CPU                                 | 4.4047       | 0.00380893       | N/A         |
+| Naive Reduce GPU                    | 0.05024      | 0.333941         | N/A         |
+| Interleaved Addressing Reduce GPU   | 0.037216     | 0.450807         | N/A         |
+| Sequence Addressing Reduce GPU      | 0.050432     | 0.33267          | N/A         |
+| Add During Load Reduce GPU          | 0.02112      | 0.794376         | N/A         |
+| Unroll Last Warp Reduce GPU         | 0.019776     | 0.848362         | N/A         |
+| Completely Unrolled Warp Reduce GPU | 0.023456     | 0.715263         | N/A         |
+| Multiple Elements Reduce GPU        | 0.01968      | 0.852501         | N/A         |
 
 - Dot Product:
 
-| Kernel           | Time (ms) | Bandwith (TB/s) |
-| ---------------- | --------- | --------------- |
-| CPU              | 9.43277   | 0.00177861      |
-| Naive Kernel     | 7.37485   | 0.00227492      |
-| Optimized Kernel | 0.025856  | 0.648871        |
-| cuBLAS           | 0.025664  | 0.653726        |
+| Kernel           | Latency (ms) | Bandwidth (TB/s) | % of cuBLAS |
+| ---------------- | ------------ | ---------------- | ----------- |
+| CPU              | 10.3247      | 0.00324993       | 0.24 %      |
+| Naive Kernel     | 7.37251      | 0.00455129       | 0.34 %      |
+| Optimized Kernel | 0.026528     | 1.26487          | 94.57 %     |
+| cuBLAS           | 0.025088     | 1.33747          | 100 %       |
 
 ## Vector Addition
 
