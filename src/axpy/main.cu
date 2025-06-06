@@ -30,6 +30,10 @@ int main()
     size_t bytes = N * sizeof(float);
     size_t totalBytes = 2 * bytes;
 
+    int vectorCount = N / 4;
+    size_t vectorBytes = vectorCount * sizeof(float4);
+    dim3 vectorGrid((N / 4 + BLOCK_SIZE - 1) / BLOCK_SIZE);
+
     float alpha = 2.0f;
 
     float *h_x = new float[N];
@@ -46,16 +50,25 @@ int main()
     initVector<float>(h_y_cublas, N);
 
     float *d_x, *d_y_gpu, *d_y_cublas;
+    float4 *d_x4, *d_y4;
 
     // Allocate device memory
     CHECK_CUDA(cudaMalloc(&d_x, bytes));
     CHECK_CUDA(cudaMalloc(&d_y_gpu, bytes));
     CHECK_CUDA(cudaMalloc(&d_y_cublas, bytes));
 
+    // Allocate memory for vectorized version
+    CHECK_CUDA(cudaMalloc(&d_x4, vectorBytes));
+    CHECK_CUDA(cudaMalloc(&d_y4, vectorBytes));
+
     // Copy data from host to device
     CHECK_CUDA(cudaMemcpy(d_x, h_x, bytes, cudaMemcpyHostToDevice));
     CHECK_CUDA(cudaMemcpy(d_y_gpu, h_y_gpu, bytes, cudaMemcpyHostToDevice));
     CHECK_CUDA(cudaMemcpy(d_y_cublas, h_y_cublas, bytes, cudaMemcpyHostToDevice));
+
+    // Copy data for vectorized version
+    CHECK_CUDA(cudaMemcpy(d_x4, h_x, bytes, cudaMemcpyHostToDevice));
+    CHECK_CUDA(cudaMemcpy(d_y4, h_y_gpu, bytes, cudaMemcpyHostToDevice));
 
     // Perform AXPY on CPU
     CudaTimer cpuTimer("AXPY CPU", &totalBytes);
@@ -68,21 +81,27 @@ int main()
     std::cout << "Warming up GPUs..." << std::endl;
     for (int i = 0; i < 3; ++i)
     {
-        saxpy<<<grid, block>>>(alpha, d_x, d_y_gpu, N);
+        naiveSaxpy<<<grid, block>>>(alpha, d_x, d_y_gpu, N);
         CHECK_CUDA(cudaGetLastError());
         CHECK_CUDA(cudaDeviceSynchronize());
+
+        vectorizedSaxpy<<<vectorGrid, block>>>(alpha, d_x4, d_y4, vectorCount);
+        CHECK_CUDA(cudaGetLastError());
+        CHECK_CUDA(cudaDeviceSynchronize());
+
         CHECK_CUBLAS(cublasSaxpy(cublasHandle, N, &alpha, d_x, 1, d_y_cublas, 1));
         CHECK_CUDA(cudaDeviceSynchronize());
     }
 
     // Reset device vectors to initial values after warmup
     CHECK_CUDA(cudaMemcpy(d_y_gpu, h_y_init, bytes, cudaMemcpyHostToDevice));
+    CHECK_CUDA(cudaMemcpy(d_y4, h_y_init, bytes, cudaMemcpyHostToDevice));
     CHECK_CUDA(cudaMemcpy(d_y_cublas, h_y_init, bytes, cudaMemcpyHostToDevice));
 
-    // Perform AXPY using CUDA kernel
-    CudaTimer gpuTimer("AXPY GPU Kernel", &totalBytes);
+    // Perform Naive AXPY using CUDA kernel
+    CudaTimer gpuTimer("Naive AXPY GPU Kernel", &totalBytes);
     gpuTimer.start();
-    saxpy<<<grid, block>>>(alpha, d_x, d_y_gpu, N);
+    naiveSaxpy<<<grid, block>>>(alpha, d_x, d_y_gpu, N);
     CHECK_CUDA(cudaGetLastError());
     CHECK_CUDA(cudaDeviceSynchronize());
     gpuTimer.stop();
@@ -92,6 +111,21 @@ int main()
     CHECK_CUDA(cudaMemcpy(h_y_gpu, d_y_gpu, bytes, cudaMemcpyDeviceToHost));
 
     // Verify results
+    checkVector<float>(h_y_gpu, h_y_cpu, N);
+
+    // Perform Verctorized AXPY using CUDA kernel
+    CudaTimer vectorizedGpuTimer("Vectorized AXPY GPU Kernel", &totalBytes);
+    vectorizedGpuTimer.start();
+    vectorizedSaxpy<<<vectorGrid, block>>>(alpha, d_x4, d_y4, vectorCount);
+    CHECK_CUDA(cudaGetLastError());
+    CHECK_CUDA(cudaDeviceSynchronize());
+    vectorizedGpuTimer.stop();
+    vectorizedGpuTimer.print();
+
+    // Copy results back to host for vectorized version
+    CHECK_CUDA(cudaMemcpy(h_y_gpu, d_y4, bytes, cudaMemcpyDeviceToHost));
+
+    // Verify results for vectorized version
     checkVector<float>(h_y_gpu, h_y_cpu, N);
 
     // Perform AXPY using cuBLAS

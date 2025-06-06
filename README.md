@@ -28,11 +28,12 @@ All benchmarks were run on a system with the following specifications:
 
 - AXPY:
 
-| Kernel     | Latency (ms) | Bandwidth (TB/s) | % of cuBLAS |
-| ---------- | ------------ | ---------------- | ----------- |
-| CPU        | 5.82874      | 0.00575673       | 0.43%       |
-| GPU Kernel | 0.026912     | 1.24682          | 95.24 %     |
-| cuBLAS     | 0.025632     | 1.30908          | 100 %       |
+| Kernel                     | Latency (ms) | Bandwidth (TB/s) | % of cuBLAS |
+| -------------------------- | ------------ | ---------------- | ----------- |
+| CPU                        | 5.69472      | 0.0058922        | 0.48 %      |
+| Naive AXPY GPU Kernel      | 0.028864     | 1.1625           | 94.00 %     |
+| Vectorized AXPY GPU Kernel | 0.027264     | 1.23072          | 99.53 %     |
+| cuBLAS                     | 0.027136     | 1.23653          | 100 %       |
 
 - Vector Addition:
 
