@@ -54,7 +54,7 @@ int main()
     CHECK_CUDA(cudaMemset(d_out, h_out_gpu, sizeof(int)));
 
     // Perform CPU computation
-    CudaTimer cpuTimer("Reduction CPU", &bytes);
+    CudaTimer cpuTimer("Reduction CPU", bytes);
     cpuTimer.start();
     reductionCpu(h_in, &h_out_cpu, N);
     cpuTimer.stop();
@@ -101,7 +101,7 @@ int main()
     }
 
     // Perform naive reduce using CUDA kernel
-    CudaTimer naiveReduceTimer("Naive Reduce GPU", &bytes);
+    CudaTimer naiveReduceTimer("Naive Reduce GPU", bytes);
     naiveReduceTimer.start();
     CHECK_CUDA(cudaMemset(d_out, 0, sizeof(int)));
     naiveReduce<<<grid, block, BLOCK_SIZE * sizeof(int)>>>(d_in, d_out);
@@ -117,7 +117,7 @@ int main()
     checkResult(h_out_cpu, h_out_gpu);
 
     // Perform interleaved addressing reduce using CUDA kernel
-    CudaTimer interleavedReduceTimer("Interleaved Addressing Reduce GPU", &bytes);
+    CudaTimer interleavedReduceTimer("Interleaved Addressing Reduce GPU", bytes);
     interleavedReduceTimer.start();
     CHECK_CUDA(cudaMemset(d_out, 0, sizeof(int)));
     interleaveAddressingReduce<<<grid, block, BLOCK_SIZE * sizeof(int)>>>(d_in, d_out);
@@ -133,7 +133,7 @@ int main()
     checkResult(h_out_cpu, h_out_gpu);
 
     // Perform sequence addressing reduce using CUDA kernel
-    CudaTimer sequenceReduceTimer("Sequence Addressing Reduce GPU", &bytes);
+    CudaTimer sequenceReduceTimer("Sequence Addressing Reduce GPU", bytes);
     sequenceReduceTimer.start();
     CHECK_CUDA(cudaMemset(d_out, 0, sizeof(int)));
     naiveReduce<<<grid, block, BLOCK_SIZE * sizeof(int)>>>(d_in, d_out);
@@ -149,7 +149,7 @@ int main()
     checkResult(h_out_cpu, h_out_gpu);
 
     // Perform add during load reduce using CUDA kernel
-    CudaTimer addDuringLoadReduceTimer("Add During Load Reduce GPU", &bytes);
+    CudaTimer addDuringLoadReduceTimer("Add During Load Reduce GPU", bytes);
     addDuringLoadReduceTimer.start();
     CHECK_CUDA(cudaMemset(d_out, 0, sizeof(int)));
     addDuringLoadReduce<<<numBlocks, block, BLOCK_SIZE * sizeof(int)>>>(d_in, d_out);
@@ -165,7 +165,7 @@ int main()
     checkResult(h_out_cpu, h_out_gpu);
 
     // Perform unroll last warp reduce using CUDA kernel
-    CudaTimer unrollLastWarpReduceTimer("Unroll Last Warp Reduce GPU", &bytes);
+    CudaTimer unrollLastWarpReduceTimer("Unroll Last Warp Reduce GPU", bytes);
     unrollLastWarpReduceTimer.start();
     CHECK_CUDA(cudaMemset(d_out, 0, sizeof(int)));
     unrollLastWarpReduce<<<numBlocks, block, BLOCK_SIZE * sizeof(int)>>>(d_in, d_out);
@@ -181,7 +181,7 @@ int main()
     checkResult(h_out_cpu, h_out_gpu);
 
     // Perform completely unrolled warp reduce using CUDA kernel
-    CudaTimer completelyUnrolledWarpReduceTimer("Completely Unrolled Warp Reduce GPU", &bytes);
+    CudaTimer completelyUnrolledWarpReduceTimer("Completely Unrolled Warp Reduce GPU", bytes);
     completelyUnrolledWarpReduceTimer.start();
     CHECK_CUDA(cudaMemset(d_out, 0, sizeof(int)));
     completelyUnrollReduce<BLOCK_SIZE><<<numBlocks, block, BLOCK_SIZE * sizeof(int)>>>(d_in, d_out);
@@ -197,7 +197,7 @@ int main()
     checkResult(h_out_cpu, h_out_gpu);
 
     // Perform multiple elements reduce using CUDA kernel
-    CudaTimer multipleElementsReduceTimer("Multiple Elements Reduce GPU", &bytes);
+    CudaTimer multipleElementsReduceTimer("Multiple Elements Reduce GPU", bytes);
     multipleElementsReduceTimer.start();
     CHECK_CUDA(cudaMemset(d_out, 0, sizeof(int)));
     multipleElementsReduce<BLOCK_SIZE><<<numBlocks, block, BLOCK_SIZE * sizeof(int)>>>(d_in, d_out, N);

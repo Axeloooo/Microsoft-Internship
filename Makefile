@@ -18,18 +18,20 @@ REDUCE_SRC  := $(SRC_DIR)/reduce/main.cu
 AXPY_SRC    := $(SRC_DIR)/axpy/main.cu
 DOT_SRC     := $(SRC_DIR)/dot/main.cu
 ADD_SRC     := $(SRC_DIR)/add/main.cu
+GEMM_SRC    := $(SRC_DIR)/gemm/main.cu
 
 # Output binaries
 REDUCE_BIN  := $(BUILD_DIR)/reduction
 AXPY_BIN    := $(BUILD_DIR)/axpy
 DOT_BIN     := $(BUILD_DIR)/dot
 ADD_BIN     := $(BUILD_DIR)/add
+GEMM_BIN    := $(BUILD_DIR)/gemm
 
 # ------------------------------------------------------------------------
 # 1) Top‐level “build” target (for CI)
 # ------------------------------------------------------------------------
 .PHONY: build
-build: $(REDUCE_BIN) $(AXPY_BIN) $(DOT_BIN) $(ADD_BIN)
+build: $(REDUCE_BIN) $(AXPY_BIN) $(DOT_BIN) $(ADD_BIN) $(GEMM_BIN)
 	@echo "All modules built. (No execution.)"
 
 # ------------------------------------------------------------------------
@@ -59,6 +61,11 @@ reduce: $(REDUCE_BIN)
 	@echo "Running reduction module…"
 	@$(REDUCE_BIN)
 
+.PHONY: gemm
+gemm: $(GEMM_BIN)
+	@echo "Running GEMM module…"
+	@$(GEMM_BIN)
+
 # ------------------------------------------------------------------------
 # 3) Rules to compile each binary
 #
@@ -85,6 +92,11 @@ $(ADD_BIN): $(ADD_SRC)
 	@echo "Building add module…"
 	@mkdir -p $(BUILD_DIR)
 	$(NVCC) $(NVCCFLAGS) -o $@ $<
+
+$(GEMM_BIN): $(GEMM_SRC)
+	@echo "Building GEMM module…"
+	@mkdir -p $(BUILD_DIR)
+	$(NVCC) $(NVCCFLAGS) $(CUBLAS_LIBS) -o $@ $<
 
 # ------------------------------------------------------------------------
 # 4) Clean everything
