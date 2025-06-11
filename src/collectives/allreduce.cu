@@ -7,7 +7,8 @@
 #define N 4194304
 #define BYTES (N * sizeof(float))
 #define BLOCK 256
-#define GRID (N + BLOCK - 1 / BLOCK)
+#define GRID ((N + BLOCK - 1) / BLOCK)
+#define ROOT 0
 
 __global__ void vectorAdd(float *a, float *b, float *c, int n)
 {
@@ -46,9 +47,9 @@ int main(int argc, char **argv)
     }
 
     // Device arrays
-    float **d_input = new float *[NUM_GPUS];
-    float **d_result = new float *[NUM_GPUS];
-    float **d_temp = new float *[NUM_GPUS];
+    float **d_in = new float *[NUM_GPUS];
+    float **d_out = new float *[NUM_GPUS];
+    float **d_tmp = new float *[NUM_GPUS];
     int *devices = new int[NUM_GPUS];
     cudaStream_t *streams = new cudaStream_t[NUM_GPUS];
 
@@ -62,9 +63,9 @@ int main(int argc, char **argv)
     for (int i = 0; i < NUM_GPUS; i++)
     {
         CHECK_CUDA(cudaSetDevice(devices[i]));
-        CHECK_CUDA(cudaMalloc(&d_input[i], BYTES));
-        CHECK_CUDA(cudaMalloc(&d_result[i], BYTES));
-        CHECK_CUDA(cudaMalloc(&d_temp[i], BYTES));
+        CHECK_CUDA(cudaMalloc(&d_in[i], BYTES));
+        CHECK_CUDA(cudaMalloc(&d_out[i], BYTES));
+        CHECK_CUDA(cudaMalloc(&d_tmp[i], BYTES));
         CHECK_CUDA(cudaStreamCreate(&streams[i]));
     }
 
@@ -90,24 +91,32 @@ int main(int argc, char **argv)
     for (int i = 0; i < NUM_GPUS; i++)
     {
         CHECK_CUDA(cudaSetDevice(devices[i]));
-        CHECK_CUDA(cudaMemcpy(d_input[i], h_a[i], BYTES, cudaMemcpyHostToDevice));
-        CHECK_CUDA(cudaMemcpy(d_result[i], h_a[i], BYTES, cudaMemcpyHostToDevice));
+        CHECK_CUDA(cudaMemcpy(d_in[i], h_a[i], BYTES, cudaMemcpyHostToDevice));
     }
 
-    // Allreduce using ring algorithm
-    for (int step = 1; step < NUM_GPUS; step++)
+    // Step 1: Reduce - accumulate all data to GPU 0 (root)
+    CHECK_CUDA(cudaSetDevice(devices[ROOT]));
+    CHECK_CUDA(cudaMemcpy(d_out[ROOT], d_in[ROOT], BYTES, cudaMemcpyDeviceToDevice));
+
+    for (int i = 0; i < NUM_GPUS; i++)
     {
-        for (int dest = 0; dest < NUM_GPUS; dest++)
+        if (i != ROOT)
         {
-            int src = (dest + step) % NUM_GPUS;
-            CHECK_CUDA(cudaSetDevice(devices[dest]));
-
-            CHECK_CUDA(cudaMemcpyPeerAsync(d_temp[dest], devices[dest], d_input[src], devices[src], BYTES, streams[dest]));
-
-            CHECK_CUDA(cudaStreamSynchronize(streams[dest]));
-
-            vectorAdd<<<GRID, BLOCK, 0, streams[dest]>>>(d_result[dest], d_temp[dest], d_result[dest], N);
+            CHECK_CUDA(cudaSetDevice(devices[ROOT]));
+            CHECK_CUDA(cudaMemcpyPeerAsync(d_tmp[ROOT], devices[ROOT], d_in[i], devices[i], BYTES, streams[ROOT]));
+            CHECK_CUDA(cudaStreamSynchronize(streams[ROOT]));
+            vectorAdd<<<GRID, BLOCK, 0, streams[ROOT]>>>(d_out[ROOT], d_tmp[ROOT], d_out[ROOT], N);
             CHECK_CUDA(cudaGetLastError());
+        }
+    }
+
+    // Step 2: Broadcast - copy reduced result from root to all other GPUs
+    for (uint i = 0; i < NUM_GPUS; i++)
+    {
+        if (i != ROOT)
+        {
+            CHECK_CUDA(cudaSetDevice(devices[i]));
+            CHECK_CUDA(cudaMemcpyPeerAsync(d_out[i], devices[i], d_out[ROOT], devices[ROOT], BYTES, streams[i]));
         }
     }
 
@@ -124,7 +133,7 @@ int main(int argc, char **argv)
     {
         CHECK_CUDA(cudaSetDevice(devices[i]));
         float *verify_data = new float[N];
-        CHECK_CUDA(cudaMemcpy(verify_data, d_result[i], BYTES, cudaMemcpyDeviceToHost));
+        CHECK_CUDA(cudaMemcpy(verify_data, d_out[i], BYTES, cudaMemcpyDeviceToHost));
 
         bool success = true;
         for (int j = 0; j < N; j++)
@@ -145,16 +154,16 @@ int main(int argc, char **argv)
     for (int i = 0; i < NUM_GPUS; i++)
     {
         CHECK_CUDA(cudaSetDevice(devices[i]));
-        CHECK_CUDA(cudaFree(d_input[i]));
-        CHECK_CUDA(cudaFree(d_result[i]));
-        CHECK_CUDA(cudaFree(d_temp[i]));
+        CHECK_CUDA(cudaFree(d_in[i]));
+        CHECK_CUDA(cudaFree(d_out[i]));
+        CHECK_CUDA(cudaFree(d_tmp[i]));
         CHECK_CUDA(cudaStreamDestroy(streams[i]));
         delete[] h_a[i];
     }
     delete[] devices;
-    delete[] d_input;
-    delete[] d_result;
-    delete[] d_temp;
+    delete[] d_in;
+    delete[] d_out;
+    delete[] d_tmp;
     delete[] streams;
     delete[] h_a;
     delete[] h_expected;
