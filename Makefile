@@ -9,6 +9,9 @@ NVCCFLAGS   := -I include -arch=sm_90
 # cuBLAS linking flags (only for axpy and dot)
 CUBLAS_LIBS := -lcublas
 
+# NCCL linking flags (only for allgather and allreduce)
+NCCL_LIBS   := -lnccl
+
 # Directories
 SRC_DIR     := src
 BUILD_DIR   := build
@@ -19,6 +22,7 @@ AXPY_SRC    := $(SRC_DIR)/axpy/main.cu
 DOT_SRC     := $(SRC_DIR)/dot/main.cu
 ADD_SRC     := $(SRC_DIR)/add/main.cu
 GEMM_SRC    := $(SRC_DIR)/gemm/main.cu
+BROADCAST_SRC := $(SRC_DIR)/collectives/broadcast.cu
 
 # Output binaries
 REDUCE_BIN  := $(BUILD_DIR)/reduction
@@ -26,12 +30,13 @@ AXPY_BIN    := $(BUILD_DIR)/axpy
 DOT_BIN     := $(BUILD_DIR)/dot
 ADD_BIN     := $(BUILD_DIR)/add
 GEMM_BIN    := $(BUILD_DIR)/gemm
+BROADCAST_BIN := $(BUILD_DIR)/broadcast
 
 # ------------------------------------------------------------------------
 # 1) Top‐level “build” target (for CI)
 # ------------------------------------------------------------------------
 .PHONY: build
-build: $(REDUCE_BIN) $(AXPY_BIN) $(DOT_BIN) $(ADD_BIN) $(GEMM_BIN)
+build: $(REDUCE_BIN) $(AXPY_BIN) $(DOT_BIN) $(ADD_BIN) $(GEMM_BIN) $(BROADCAST_BIN)
 	@echo "All modules built. (No execution.)"
 
 # ------------------------------------------------------------------------
@@ -66,6 +71,11 @@ gemm: $(GEMM_BIN)
 	@echo "Running GEMM module…"
 	@$(GEMM_BIN)
 
+.PHONY: broadcast
+broadcast: $(BROADCAST_BIN)
+	@echo "Running broadcast module…"
+	@$(BROADCAST_BIN)
+
 # ------------------------------------------------------------------------
 # 3) Rules to compile each binary
 #
@@ -97,6 +107,11 @@ $(GEMM_BIN): $(GEMM_SRC)
 	@echo "Building GEMM module…"
 	@mkdir -p $(BUILD_DIR)
 	$(NVCC) $(NVCCFLAGS) $(CUBLAS_LIBS) -o $@ $<
+
+$(BROADCAST_BIN): $(BROADCAST_SRC)
+	@echo "Building broadcast module…"
+	@mkdir -p $(BUILD_DIR)
+	$(NVCC) $(NVCCFLAGS) -o $@ $<
 
 # ------------------------------------------------------------------------
 # 4) Clean everything

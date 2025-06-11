@@ -127,3 +127,19 @@ This project is licensed under the Apache License 2.0 - see the [LICENSE](LICENS
 ## Contributors
 
 - [Axel Sanchez](https://github.com/Axeloooo)
+
+## Extra
+
+```bash
+docker run --gpus all -it \
+  --name microsoft-internship-axel \
+  --network host \
+  --privileged \
+  --cap-add=SYS_PTRACE \
+  --device=/dev/infiniband \
+  --device=/dev/dri \
+  -v /home/t-axels/Microsoft-Internship:/workspace \
+  --ipc=host \
+  --shm-size=32g \
+  nvcr.io/nvidia/pytorch:24.12-py3
+```
