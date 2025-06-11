@@ -25,6 +25,8 @@ GEMM_SRC    := $(SRC_DIR)/gemm/main.cu
 BROADCAST_SRC := $(SRC_DIR)/collectives/broadcast.cu
 ALLGATHER_SRC := $(SRC_DIR)/collectives/allgather.cu
 ALLREDUCE_SRC := $(SRC_DIR)/collectives/allreduce.cu
+REDUCE_COLLECTIVE_SRC := $(SRC_DIR)/collectives/reduce.cu
+REDUCESCATTER_SRC := $(SRC_DIR)/collectives/reducescatter.cu
 
 # Output binaries
 REDUCE_BIN  := $(BUILD_DIR)/reduction
@@ -35,12 +37,14 @@ GEMM_BIN    := $(BUILD_DIR)/gemm
 BROADCAST_BIN := $(BUILD_DIR)/broadcast
 ALLGATHER_BIN := $(BUILD_DIR)/allgather
 ALLREDUCE_BIN := $(BUILD_DIR)/allreduce
+REDUCE_COLLECTIVE_BIN := $(BUILD_DIR)/reducecollective
+REDUCESCATTER_BIN := $(BUILD_DIR)/reducescatter
 
 # ------------------------------------------------------------------------
 # 1) Top‐level “build” target (for CI)
 # ------------------------------------------------------------------------
 .PHONY: build
-build: $(REDUCE_BIN) $(AXPY_BIN) $(DOT_BIN) $(ADD_BIN) $(GEMM_BIN) $(BROADCAST_BIN) $(ALLGATHER_BIN) $(ALLREDUCE_BIN)
+build: $(REDUCE_BIN) $(AXPY_BIN) $(DOT_BIN) $(ADD_BIN) $(GEMM_BIN) $(BROADCAST_BIN) $(ALLGATHER_BIN) $(ALLREDUCE_BIN) $(REDUCE_COLLECTIVE_BIN) $(REDUCESCATTER_BIN)
 	@echo "All modules built. (No execution.)"
 
 # ------------------------------------------------------------------------
@@ -90,6 +94,16 @@ allreduce: $(ALLREDUCE_BIN)
 	@echo "Running allreduce module…"
 	@$(ALLREDUCE_BIN)
 
+.PHONY: reducecollective
+reducecollective: $(REDUCE_COLLECTIVE_BIN)
+	@echo "Running reduction collectives module…"
+	@$(REDUCE_COLLECTIVE_BIN)
+
+.PHONY: reducescatter
+reducescatter: $(REDUCESCATTER_BIN)
+	@echo "Running reducescatter module…"
+	@$(REDUCESCATTER_BIN)
+
 # ------------------------------------------------------------------------
 # 3) Rules to compile each binary
 #
@@ -134,6 +148,16 @@ $(ALLGATHER_BIN): $(ALLGATHER_SRC)
 
 $(ALLREDUCE_BIN): $(ALLREDUCE_SRC)
 	@echo "Building allreduce module…"
+	@mkdir -p $(BUILD_DIR)
+	$(NVCC) $(NVCCFLAGS) -o $@ $<
+
+$(REDUCE_COLLECTIVE_BIN): $(REDUCE_COLLECTIVE_SRC)
+	@echo "Building reduction collectives module…"
+	@mkdir -p $(BUILD_DIR)
+	$(NVCC) $(NVCCFLAGS) -o $@ $<
+
+$(REDUCESCATTER_BIN): $(REDUCESCATTER_SRC)
+	@echo "Building reducescatter module…"
 	@mkdir -p $(BUILD_DIR)
 	$(NVCC) $(NVCCFLAGS) -o $@ $<
 
