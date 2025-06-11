@@ -71,7 +71,7 @@ int main()
     CHECK_CUDA(cudaMemcpy(d_y4, h_y_gpu, bytes, cudaMemcpyHostToDevice));
 
     // Perform AXPY on CPU
-    CudaTimer cpuTimer("AXPY CPU", &totalBytes);
+    CudaTimer cpuTimer("AXPY CPU", totalBytes);
     cpuTimer.start();
     axpyCpu(alpha, h_x, h_y_cpu, N);
     cpuTimer.stop();
@@ -99,7 +99,7 @@ int main()
     CHECK_CUDA(cudaMemcpy(d_y_cublas, h_y_init, bytes, cudaMemcpyHostToDevice));
 
     // Perform Naive AXPY using CUDA kernel
-    CudaTimer gpuTimer("Naive AXPY GPU Kernel", &totalBytes);
+    CudaTimer gpuTimer("Naive AXPY GPU Kernel", totalBytes);
     gpuTimer.start();
     naiveSaxpy<<<grid, block>>>(alpha, d_x, d_y_gpu, N);
     CHECK_CUDA(cudaGetLastError());
@@ -111,10 +111,10 @@ int main()
     CHECK_CUDA(cudaMemcpy(h_y_gpu, d_y_gpu, bytes, cudaMemcpyDeviceToHost));
 
     // Verify results
-    checkVector<float>(h_y_gpu, h_y_cpu, N);
+    verifyVector<float>(h_y_gpu, h_y_cpu, N);
 
     // Perform Verctorized AXPY using CUDA kernel
-    CudaTimer vectorizedGpuTimer("Vectorized AXPY GPU Kernel", &totalBytes);
+    CudaTimer vectorizedGpuTimer("Vectorized AXPY GPU Kernel", totalBytes);
     vectorizedGpuTimer.start();
     vectorizedSaxpy<<<vectorGrid, block>>>(alpha, d_x4, d_y4, vectorCount);
     CHECK_CUDA(cudaGetLastError());
@@ -126,10 +126,10 @@ int main()
     CHECK_CUDA(cudaMemcpy(h_y_gpu, d_y4, bytes, cudaMemcpyDeviceToHost));
 
     // Verify results for vectorized version
-    checkVector<float>(h_y_gpu, h_y_cpu, N);
+    verifyVector<float>(h_y_gpu, h_y_cpu, N);
 
     // Perform AXPY using cuBLAS
-    CudaTimer cublasTimer("AXPY cuBLAS", &totalBytes);
+    CudaTimer cublasTimer("AXPY cuBLAS", totalBytes);
     cublasTimer.start();
     CHECK_CUBLAS(cublasSaxpy(cublasHandle, N, &alpha, d_x, 1, d_y_cublas, 1));
     cublasTimer.stop();
@@ -139,7 +139,7 @@ int main()
     CHECK_CUDA(cudaMemcpy(h_y_cublas, d_y_cublas, bytes, cudaMemcpyDeviceToHost));
 
     // Verify results
-    checkVector<float>(h_y_cublas, h_y_cpu, N);
+    verifyVector<float>(h_y_cublas, h_y_cpu, N);
 
     // Clean up
     delete[] h_x;

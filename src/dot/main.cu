@@ -68,7 +68,7 @@ int main()
     CHECK_CUDA(cudaMemcpy(d_b, h_b, bytes, cudaMemcpyHostToDevice));
 
     // Perform dot product on CPU
-    CudaTimer cpuTimer("Dot Product CPU", &totalBytes);
+    CudaTimer cpuTimer("Dot Product CPU", totalBytes);
     cpuTimer.start();
     dotProductCpu(h_a, h_b, &h_c_cpu, N);
     cpuTimer.stop();
@@ -93,7 +93,7 @@ int main()
     }
 
     // Perform naive dot product using CUDA kernel
-    CudaTimer naiveGpuTimer("Naive Dot Product GPU Kernel", &totalBytes);
+    CudaTimer naiveGpuTimer("Naive Dot Product GPU Kernel", totalBytes);
     naiveGpuTimer.start();
     CHECK_CUDA(cudaMemset(d_c_gpu, 0, sizeof(float)));
     naiveSdot<<<grid, block>>>(d_a, d_b, d_c_gpu, N);
@@ -109,7 +109,7 @@ int main()
     checkResult(h_c_cpu, h_c_gpu);
 
     // Perform optimized dot product using CUDA kernel
-    CudaTimer optimizedGpuTimer("Optimized Dot Product GPU Kernel", &totalBytes);
+    CudaTimer optimizedGpuTimer("Optimized Dot Product GPU Kernel", totalBytes);
     optimizedGpuTimer.start();
     CHECK_CUDA(cudaMemset(d_c_gpu, 0, sizeof(float)));
     optimizedSdot<BLOCK_SIZE><<<optimGrid, block, BLOCK_SIZE * sizeof(float)>>>(d_a, d_b, d_c_gpu, N);
@@ -125,7 +125,7 @@ int main()
     checkResult(h_c_cpu, h_c_gpu);
 
     // Perform dot product using cuBLAS
-    CudaTimer cublasTimer("Dot Product cuBLAS", &totalBytes);
+    CudaTimer cublasTimer("Dot Product cuBLAS", totalBytes);
     cublasTimer.start();
     CHECK_CUBLAS(cublasSdot(cublasHandle, N, d_a, 1, d_b, 1, &h_c_cublas));
     cublasTimer.stop();

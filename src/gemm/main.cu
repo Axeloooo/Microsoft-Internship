@@ -1,0 +1,165 @@
+#include <iostream>
+#include <cstring>
+#include <cublas_v2.h>
+#include <cuda_runtime.h>
+
+#include "gemm.cuh"
+#include "timer.cuh"
+#include "checker.cuh"
+#include "data.cuh"
+
+#define M 1024
+#define N 1024
+#define K 1024
+#define BLOCK_DIM 16
+
+void sgemmCpu(int m, int n, int k, float alpha, const float *A, const float *B, float beta, float *C)
+{
+    for (int i = 0; i < m; ++i)
+    {
+        for (int j = 0; j < n; ++j)
+        {
+            float tmp = 0.0f;
+            for (int p = 0; p < k; ++p)
+            {
+                tmp += A[i * k + p] * B[p * n + j];
+            }
+            C[i * n + j] = alpha * tmp + beta * C[i * n + j];
+        }
+    }
+}
+
+int main()
+{
+    // Initialize cuBLAS
+    cublasHandle_t cublasHandle;
+    CHECK_CUBLAS(cublasCreate(&cublasHandle));
+
+    // Set dimensions for kernel launch
+    dim3 blockDim(BLOCK_DIM, BLOCK_DIM);
+    dim3 gridDim((M + BLOCK_DIM - 1) / BLOCK_DIM,
+                 (N + BLOCK_DIM - 1) / BLOCK_DIM);
+
+    // Calculate memory sizes
+    size_t bytesA = M * K * sizeof(float);
+    size_t bytesB = K * N * sizeof(float);
+    size_t bytesC = M * N * sizeof(float);
+    size_t totalBytes = bytesA + bytesB + bytesC;
+
+    // Calculate FLOPS: 2 operations (multiply and add) per matrix element
+    double totalFlops = 2.0 * M * N * K;
+
+    // Allocate host memory
+    float *h_A = new float[M * K];
+    float *h_B = new float[K * N];
+    float *h_C = new float[M * N];
+    float *h_C_cpu = new float[M * N];
+    float *h_C_cublas = new float[M * N];
+
+    // Initialize matrices
+    initializeMatrix<float>(h_A, M, K);
+    initializeMatrix<float>(h_B, K, N);
+    initializeMatrix<float>(h_C, M, N);
+
+    // Copy C matrix for CPU and cuBLAS computations
+    std::memcpy(h_C_cpu, h_C, bytesC);
+    std::memcpy(h_C_cublas, h_C, bytesC);
+
+    // Allocate device memory
+    float *d_A, *d_B, *d_C, *d_C_cublas;
+    CHECK_CUDA(cudaMalloc(&d_A, bytesA));
+    CHECK_CUDA(cudaMalloc(&d_B, bytesB));
+    CHECK_CUDA(cudaMalloc(&d_C, bytesC));
+    CHECK_CUDA(cudaMalloc(&d_C_cublas, bytesC));
+
+    // Copy data to device
+    CHECK_CUDA(cudaMemcpy(d_A, h_A, bytesA, cudaMemcpyHostToDevice));
+    CHECK_CUDA(cudaMemcpy(d_B, h_B, bytesB, cudaMemcpyHostToDevice));
+    CHECK_CUDA(cudaMemcpy(d_C, h_C, bytesC, cudaMemcpyHostToDevice));
+    CHECK_CUDA(cudaMemcpy(d_C_cublas, h_C, bytesC, cudaMemcpyHostToDevice));
+
+    float alpha = 1.0f;
+    float beta = 1.0f;
+
+    // Perform CPU computation
+    CudaTimer cpuTimer("SGEMM CPU", totalBytes, totalFlops);
+    cpuTimer.start();
+    sgemmCpu(M, N, K, alpha, h_A, h_B, beta, h_C_cpu);
+    cpuTimer.stop();
+    cpuTimer.print();
+
+    // Warm up GPU
+    std::cout << "Warming up GPUs..." << std::endl;
+    for (int i = 0; i < 3; ++i)
+    {
+        naiveSgemm<<<gridDim, blockDim>>>(M, N, K, alpha, d_A, d_B, beta, d_C);
+        CHECK_CUDA(cudaGetLastError());
+        CHECK_CUDA(cudaDeviceSynchronize());
+
+        coalescingSgemm<BLOCK_DIM><<<gridDim, blockDim>>>(M, N, K, alpha, d_A, d_B, beta, d_C);
+        CHECK_CUDA(cudaGetLastError());
+        CHECK_CUDA(cudaDeviceSynchronize());
+
+        CHECK_CUBLAS(cublasSgemm(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, N, M, K, &alpha, d_B, N, d_A, K, &beta, d_C_cublas, N));
+        CHECK_CUDA(cudaDeviceSynchronize());
+    }
+
+    // Reset matrices after warmup
+    CHECK_CUDA(cudaMemcpy(d_C, h_C, bytesC, cudaMemcpyHostToDevice));
+    CHECK_CUDA(cudaMemcpy(d_C_cublas, h_C, bytesC, cudaMemcpyHostToDevice));
+
+    // Perform naive SGEMM
+    CudaTimer naiveTimer("Naive SGEMM GPU", totalBytes, totalFlops);
+    naiveTimer.start();
+    naiveSgemm<<<gridDim, blockDim>>>(M, N, K, alpha, d_A, d_B, beta, d_C);
+    CHECK_CUDA(cudaGetLastError());
+    CHECK_CUDA(cudaDeviceSynchronize());
+    naiveTimer.stop();
+    naiveTimer.print();
+
+    // Copy results back and verify
+    CHECK_CUDA(cudaMemcpy(h_C, d_C, bytesC, cudaMemcpyDeviceToHost));
+    verifyMatrix<float>(h_C_cpu, h_C, M, N);
+
+    // Reset output matrix CHECK THIS
+    CHECK_CUDA(cudaMemcpy(d_C, h_C, bytesC, cudaMemcpyHostToDevice));
+
+    // Perform coalescing SGEMM
+    CudaTimer coalescingTimer("Coalescing SGEMM GPU", totalBytes, totalFlops);
+    coalescingTimer.start();
+    coalescingSgemm<BLOCK_DIM><<<gridDim, blockDim>>>(M, N, K, alpha, d_A, d_B, beta, d_C);
+    CHECK_CUDA(cudaGetLastError());
+    CHECK_CUDA(cudaDeviceSynchronize());
+    coalescingTimer.stop();
+    coalescingTimer.print();
+
+    // Copy results back and verify
+    CHECK_CUDA(cudaMemcpy(h_C, d_C, bytesC, cudaMemcpyDeviceToHost));
+    verifyMatrix<float>(h_C_cpu, h_C, M, N);
+
+    // Perform cuBLAS SGEMM
+    CudaTimer cublasTimer("cuBLAS SGEMM", totalBytes, totalFlops);
+    cublasTimer.start();
+    CHECK_CUBLAS(cublasSgemm(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, N, M, K, &alpha, d_B, N, d_A, K, &beta, d_C_cublas, N));
+    CHECK_CUDA(cudaDeviceSynchronize());
+    cublasTimer.stop();
+    cublasTimer.print();
+
+    // Copy results back and verify
+    CHECK_CUDA(cudaMemcpy(h_C_cublas, d_C_cublas, bytesC, cudaMemcpyDeviceToHost));
+    verifyMatrix<float>(h_C_cpu, h_C_cublas, M, N);
+
+    // Clean up
+    delete[] h_A;
+    delete[] h_B;
+    delete[] h_C;
+    delete[] h_C_cpu;
+    delete[] h_C_cublas;
+    CHECK_CUDA(cudaFree(d_A));
+    CHECK_CUDA(cudaFree(d_B));
+    CHECK_CUDA(cudaFree(d_C));
+    CHECK_CUDA(cudaFree(d_C_cublas));
+    CHECK_CUBLAS(cublasDestroy(cublasHandle));
+
+    return 0;
+}

@@ -47,7 +47,7 @@ int main()
     CHECK_CUDA(cudaMemcpy(d_b, h_b, bytes, cudaMemcpyHostToDevice));
 
     // Perform Vector Addition on CPU
-    CudaTimer cpuTimer("Vector Addition CPU", &totalBytes);
+    CudaTimer cpuTimer("Vector Addition CPU", totalBytes);
     cpuTimer.start();
     vectorAddCpu(h_a, h_b, h_c_cpu, N);
     cpuTimer.stop();
@@ -63,7 +63,7 @@ int main()
     }
 
     // Perform GPU computation
-    CudaTimer gpuTimer("Vector Addition GPU Kernel", &totalBytes);
+    CudaTimer gpuTimer("Vector Addition GPU Kernel", totalBytes);
     gpuTimer.start();
     add<<<grid, block>>>(d_a, d_b, d_c_gpu, N);
     CHECK_CUDA(cudaGetLastError());
@@ -75,7 +75,7 @@ int main()
     CHECK_CUDA(cudaMemcpy(h_c_gpu, d_c_gpu, bytes, cudaMemcpyDeviceToHost));
 
     // Verify results
-    checkVector<float>(h_c_cpu, h_c_gpu, N);
+    verifyVector<float>(h_c_cpu, h_c_gpu, N);
 
     // Clean up
     delete[] h_a;
