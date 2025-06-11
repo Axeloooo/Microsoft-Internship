@@ -23,6 +23,8 @@ DOT_SRC     := $(SRC_DIR)/dot/main.cu
 ADD_SRC     := $(SRC_DIR)/add/main.cu
 GEMM_SRC    := $(SRC_DIR)/gemm/main.cu
 BROADCAST_SRC := $(SRC_DIR)/collectives/broadcast.cu
+ALLGATHER_SRC := $(SRC_DIR)/collectives/allgather.cu
+ALLREDUCE_SRC := $(SRC_DIR)/collectives/allreduce.cu
 
 # Output binaries
 REDUCE_BIN  := $(BUILD_DIR)/reduction
@@ -31,12 +33,14 @@ DOT_BIN     := $(BUILD_DIR)/dot
 ADD_BIN     := $(BUILD_DIR)/add
 GEMM_BIN    := $(BUILD_DIR)/gemm
 BROADCAST_BIN := $(BUILD_DIR)/broadcast
+ALLGATHER_BIN := $(BUILD_DIR)/allgather
+ALLREDUCE_BIN := $(BUILD_DIR)/allreduce
 
 # ------------------------------------------------------------------------
 # 1) Top‐level “build” target (for CI)
 # ------------------------------------------------------------------------
 .PHONY: build
-build: $(REDUCE_BIN) $(AXPY_BIN) $(DOT_BIN) $(ADD_BIN) $(GEMM_BIN) $(BROADCAST_BIN)
+build: $(REDUCE_BIN) $(AXPY_BIN) $(DOT_BIN) $(ADD_BIN) $(GEMM_BIN) $(BROADCAST_BIN) $(ALLGATHER_BIN) $(ALLREDUCE_BIN)
 	@echo "All modules built. (No execution.)"
 
 # ------------------------------------------------------------------------
@@ -76,6 +80,16 @@ broadcast: $(BROADCAST_BIN)
 	@echo "Running broadcast module…"
 	@$(BROADCAST_BIN)
 
+.PHONY: allgather
+allgather: $(ALLGATHER_BIN)
+	@echo "Running allgather module…"
+	@$(ALLGATHER_BIN)
+
+.PHONY: allreduce
+allreduce: $(ALLREDUCE_BIN)
+	@echo "Running allreduce module…"
+	@$(ALLREDUCE_BIN)
+
 # ------------------------------------------------------------------------
 # 3) Rules to compile each binary
 #
@@ -110,6 +124,16 @@ $(GEMM_BIN): $(GEMM_SRC)
 
 $(BROADCAST_BIN): $(BROADCAST_SRC)
 	@echo "Building broadcast module…"
+	@mkdir -p $(BUILD_DIR)
+	$(NVCC) $(NVCCFLAGS) -o $@ $<
+
+$(ALLGATHER_BIN): $(ALLGATHER_SRC)
+	@echo "Building allgather module…"
+	@mkdir -p $(BUILD_DIR)
+	$(NVCC) $(NVCCFLAGS) -o $@ $<
+
+$(ALLREDUCE_BIN): $(ALLREDUCE_SRC)
+	@echo "Building allreduce module…"
 	@mkdir -p $(BUILD_DIR)
 	$(NVCC) $(NVCCFLAGS) -o $@ $<
 

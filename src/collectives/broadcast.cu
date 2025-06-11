@@ -6,7 +6,6 @@
 
 #define N 4194304
 #define BYTES (N * sizeof(float))
-#define NUM_GPUS 8
 #define ROOT 0
 
 int main(int argc, char **argv)
@@ -14,14 +13,24 @@ int main(int argc, char **argv)
     float *h_a = new float[N];
     initVector<float>(h_a, N);
 
+    int NUM_GPUS = 0;
+    CHECK_CUDA(cudaGetDeviceCount(&NUM_GPUS));
+    std::cout << "Number of GPUs available: " << NUM_GPUS << std::endl;
+
+    float **h_data = new float *[NUM_GPUS];
     int *devices = new int[NUM_GPUS];
-    float **data = new float *[N];
     cudaStream_t *streams = new cudaStream_t[NUM_GPUS];
+
+    // Initialize devices array with sequential device IDs
+    for (int i = 0; i < NUM_GPUS; i++)
+    {
+        devices[i] = i;
+    }
 
     for (uint i = 0; i < NUM_GPUS; i++)
     {
         CHECK_CUDA(cudaSetDevice(devices[i]));
-        CHECK_CUDA(cudaMalloc(&data[i], BYTES));
+        CHECK_CUDA(cudaMalloc(&h_data[i], BYTES));
         CHECK_CUDA(cudaStreamCreate(&streams[i]));
     }
 
@@ -45,7 +54,7 @@ int main(int argc, char **argv)
 
     // Initialize data on root device
     CHECK_CUDA(cudaSetDevice(devices[ROOT]));
-    CHECK_CUDA(cudaMemcpy(data[ROOT], h_a, BYTES, cudaMemcpyHostToDevice));
+    CHECK_CUDA(cudaMemcpy(h_data[ROOT], h_a, BYTES, cudaMemcpyHostToDevice));
 
     // Broadcast from root to all other devices using peer-to-peer copy
     for (uint i = 0; i < NUM_GPUS; i++)
@@ -53,7 +62,7 @@ int main(int argc, char **argv)
         if (i != ROOT)
         {
             CHECK_CUDA(cudaSetDevice(devices[i]));
-            CHECK_CUDA(cudaMemcpyPeerAsync(data[i], devices[i], data[ROOT], devices[ROOT], BYTES, streams[i]));
+            CHECK_CUDA(cudaMemcpyPeerAsync(h_data[i], devices[i], h_data[ROOT], devices[ROOT], BYTES, streams[i]));
         }
     }
 
@@ -70,7 +79,7 @@ int main(int argc, char **argv)
     {
         CHECK_CUDA(cudaSetDevice(devices[i]));
         float *verify_data = new float[N];
-        CHECK_CUDA(cudaMemcpy(verify_data, data[i], BYTES, cudaMemcpyDeviceToHost));
+        CHECK_CUDA(cudaMemcpy(verify_data, h_data[i], BYTES, cudaMemcpyDeviceToHost));
 
         bool success = true;
         for (int j = 0; j < N; j++)
@@ -89,11 +98,11 @@ int main(int argc, char **argv)
     for (uint i = 0; i < NUM_GPUS; i++)
     {
         CHECK_CUDA(cudaSetDevice(devices[i]));
-        CHECK_CUDA(cudaFree(data[i]));
+        CHECK_CUDA(cudaFree(h_data[i]));
         CHECK_CUDA(cudaStreamDestroy(streams[i]));
     }
     delete[] devices;
-    delete[] data;
+    delete[] h_data;
     delete[] streams;
     delete[] h_a;
 

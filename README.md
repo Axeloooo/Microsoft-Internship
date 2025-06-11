@@ -132,9 +132,9 @@ This project is licensed under the Apache License 2.0 - see the [LICENSE](LICENS
 
 ```bash
 docker run --gpus all -it \
+  --user $(id -u):$(id -g) \
   --name microsoft-internship-axel \
   --network host \
-  --privileged \
   --cap-add=SYS_PTRACE \
   --device=/dev/infiniband \
   --device=/dev/dri \
