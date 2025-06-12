@@ -1,5 +1,4 @@
 #include <cuda_runtime.h>
-#include <iostream>
 #include <cstdlib>
 
 #include "checker.cuh"

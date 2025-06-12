@@ -1,6 +1,7 @@
 #include <cuda_runtime.h>
 #include <iostream>
 
+#include "collectives.cuh"
 #include "checker.cuh"
 #include "data.cuh"
 
@@ -17,69 +18,35 @@ int main(int argc, char **argv)
     CHECK_CUDA(cudaGetDeviceCount(&NUM_GPUS));
     std::cout << "Number of GPUs available: " << NUM_GPUS << std::endl;
 
-    float **d_out = new float *[NUM_GPUS];
-    int *devices = new int[NUM_GPUS];
-    cudaStream_t *streams = new cudaStream_t[NUM_GPUS];
+    // Initialize MCCL library
+    MCCL<float> mccl(NUM_GPUS);
 
-    // Initialize devices array with sequential device IDs
+    // Allocate buffers for NCCL-style API
+    std::vector<float *> sendbuff(NUM_GPUS);
+    std::vector<float *> recvbuff(NUM_GPUS);
+
+    // Allocate GPU memory
     for (int i = 0; i < NUM_GPUS; i++)
     {
-        devices[i] = i;
+        CHECK_CUDA(cudaSetDevice(i));
+        CHECK_CUDA(cudaMalloc(&sendbuff[i], BYTES));
+        CHECK_CUDA(cudaMalloc(&recvbuff[i], BYTES));
     }
 
-    for (uint i = 0; i < NUM_GPUS; i++)
-    {
-        CHECK_CUDA(cudaSetDevice(devices[i]));
-        CHECK_CUDA(cudaMalloc(&d_out[i], BYTES));
-        CHECK_CUDA(cudaStreamCreate(&streams[i]));
-    }
+    // Initialize data on root device (only root's sendbuff is used in broadcast)
+    CHECK_CUDA(cudaSetDevice(ROOT));
+    CHECK_CUDA(cudaMemcpy(sendbuff[ROOT], h_a, BYTES, cudaMemcpyHostToDevice));
 
-    // Enable peer-to-peer access
-    for (uint i = 0; i < NUM_GPUS; i++)
-    {
-        for (uint j = 0; j < NUM_GPUS; j++)
-        {
-            if (i != j)
-            {
-                CHECK_CUDA(cudaSetDevice(devices[i]));
-                int can_access;
-                CHECK_CUDA(cudaDeviceCanAccessPeer(&can_access, devices[i], devices[j]));
-                if (can_access)
-                {
-                    CHECK_CUDA(cudaDeviceEnablePeerAccess(devices[j], 0));
-                }
-            }
-        }
-    }
-
-    // Initialize data on root device
-    CHECK_CUDA(cudaSetDevice(devices[ROOT]));
-    CHECK_CUDA(cudaMemcpy(d_out[ROOT], h_a, BYTES, cudaMemcpyHostToDevice));
-
-    // Broadcast from root to all other devices using peer-to-peer copy
-    for (uint i = 0; i < NUM_GPUS; i++)
-    {
-        if (i != ROOT)
-        {
-            CHECK_CUDA(cudaSetDevice(devices[i]));
-            CHECK_CUDA(cudaMemcpyPeerAsync(d_out[i], devices[i], d_out[ROOT], devices[ROOT], BYTES, streams[i]));
-        }
-    }
-
-    // Synchronize all streams
-    for (size_t i = 0; i < NUM_GPUS; i++)
-    {
-        CHECK_CUDA(cudaSetDevice(devices[i]));
-        CHECK_CUDA(cudaStreamSynchronize(streams[i]));
-    }
+    // Perform broadcast operation using MCCL
+    mccl.broadcast(sendbuff, recvbuff, N, ROOT);
 
     // Verify results
     std::cout << "Broadcast completed. Verifying results...\n";
-    for (uint i = 0; i < NUM_GPUS; i++)
+    for (int i = 0; i < NUM_GPUS; i++)
     {
-        CHECK_CUDA(cudaSetDevice(devices[i]));
+        CHECK_CUDA(cudaSetDevice(i));
         float *verify_data = new float[N];
-        CHECK_CUDA(cudaMemcpy(verify_data, d_out[i], BYTES, cudaMemcpyDeviceToHost));
+        CHECK_CUDA(cudaMemcpy(verify_data, recvbuff[i], BYTES, cudaMemcpyDeviceToHost));
 
         bool success = true;
         for (int j = 0; j < N; j++)
@@ -90,20 +57,17 @@ int main(int argc, char **argv)
                 break;
             }
         }
-        std::cout << "Device " << devices[i] << ": " << (success ? "PASS" : "FAIL") << std::endl;
+        std::cout << "Device " << i << ": " << (success ? "PASS" : "FAIL") << std::endl;
         delete[] verify_data;
     }
 
     // Cleanup
-    for (uint i = 0; i < NUM_GPUS; i++)
+    for (int i = 0; i < NUM_GPUS; i++)
     {
-        CHECK_CUDA(cudaSetDevice(devices[i]));
-        CHECK_CUDA(cudaFree(d_out[i]));
-        CHECK_CUDA(cudaStreamDestroy(streams[i]));
+        CHECK_CUDA(cudaSetDevice(i));
+        CHECK_CUDA(cudaFree(sendbuff[i]));
+        CHECK_CUDA(cudaFree(recvbuff[i]));
     }
-    delete[] devices;
-    delete[] d_out;
-    delete[] streams;
     delete[] h_a;
 
     return 0;

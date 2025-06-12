@@ -22,6 +22,7 @@ AXPY_SRC    := $(SRC_DIR)/axpy/main.cu
 DOT_SRC     := $(SRC_DIR)/dot/main.cu
 ADD_SRC     := $(SRC_DIR)/add/main.cu
 GEMM_SRC    := $(SRC_DIR)/gemm/main.cu
+COLLECTIVES_SRC := $(SRC_DIR)/collectives/collectives.cu
 BROADCAST_SRC := $(SRC_DIR)/collectives/broadcast.cu
 ALLGATHER_SRC := $(SRC_DIR)/collectives/allgather.cu
 ALLREDUCE_SRC := $(SRC_DIR)/collectives/allreduce.cu
@@ -136,30 +137,30 @@ $(GEMM_BIN): $(GEMM_SRC)
 	@mkdir -p $(BUILD_DIR)
 	$(NVCC) $(NVCCFLAGS) $(CUBLAS_LIBS) -o $@ $<
 
-$(BROADCAST_BIN): $(BROADCAST_SRC)
+$(BROADCAST_BIN): $(BROADCAST_SRC) $(COLLECTIVES_SRC)
 	@echo "Building broadcast module…"
 	@mkdir -p $(BUILD_DIR)
-	$(NVCC) $(NVCCFLAGS) -o $@ $<
+	$(NVCC) $(NVCCFLAGS) -o $@ $^
 
-$(ALLGATHER_BIN): $(ALLGATHER_SRC)
+$(ALLGATHER_BIN): $(ALLGATHER_SRC) $(COLLECTIVES_SRC)
 	@echo "Building allgather module…"
 	@mkdir -p $(BUILD_DIR)
-	$(NVCC) $(NVCCFLAGS) -o $@ $<
+	$(NVCC) $(NVCCFLAGS) -o $@ $^
 
-$(ALLREDUCE_BIN): $(ALLREDUCE_SRC)
+$(ALLREDUCE_BIN): $(ALLREDUCE_SRC) $(COLLECTIVES_SRC)
 	@echo "Building allreduce module…"
 	@mkdir -p $(BUILD_DIR)
-	$(NVCC) $(NVCCFLAGS) -o $@ $<
+	$(NVCC) $(NVCCFLAGS) -o $@ $^
 
-$(REDUCE_COLLECTIVE_BIN): $(REDUCE_COLLECTIVE_SRC)
+$(REDUCE_COLLECTIVE_BIN): $(REDUCE_COLLECTIVE_SRC) $(COLLECTIVES_SRC)
 	@echo "Building reduction collectives module…"
 	@mkdir -p $(BUILD_DIR)
-	$(NVCC) $(NVCCFLAGS) -o $@ $<
+	$(NVCC) $(NVCCFLAGS) -o $@ $^
 
-$(REDUCESCATTER_BIN): $(REDUCESCATTER_SRC)
+$(REDUCESCATTER_BIN): $(REDUCESCATTER_SRC) $(COLLECTIVES_SRC)
 	@echo "Building reducescatter module…"
 	@mkdir -p $(BUILD_DIR)
-	$(NVCC) $(NVCCFLAGS) -o $@ $<
+	$(NVCC) $(NVCCFLAGS) -o $@ $^
 
 # ------------------------------------------------------------------------
 # 4) Clean everything
