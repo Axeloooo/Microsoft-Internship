@@ -1,6 +1,6 @@
 /**
  * @file collectives.cuh
- * @author Axel Omar Sanchez Peralta (t-axels@microsopft.com)
+ * @author Axel Omar Sanchez Peralta (t-axels@microsoft.com)
  * @brief Collective communication operations for multi-GPU environments
  * @version 0.1
  * @date 2025-06-12
@@ -14,6 +14,7 @@
 
 #include <cuda_runtime.h>
 
+#include <cstddef>
 #include <iostream>
 #include <vector>
 
@@ -31,7 +32,7 @@ enum Operation { SUM, PROD, MIN, MAX, AVG };
 template <typename T>
 class MCCL {
    private:
-    uint num_gpus_;
+    std::size_t num_gpus_;
     std::vector<cudaStream_t> streams_;
     std::vector<T *> tmpbuff_;
 
@@ -40,7 +41,7 @@ class MCCL {
      *
      * @param count Number of elements needed
      */
-    void EnsureTmpBuffers(uint count);
+    void EnsureTmpBuffers(const std::size_t &count);
 
    public:
     /**
@@ -48,7 +49,7 @@ class MCCL {
      *
      * @param gpus Number of GPUs available for collective operations
      */
-    MCCL(const uint &gpus);
+    explicit MCCL(const std::size_t &gpus);
 
     /**
      * @brief Destroy the MCCL object
@@ -64,8 +65,7 @@ class MCCL {
      * @param count Number of elements per buffer
      * @param op Reduction operation to perform
      */
-    void AllReduce(const std::vector<T *> &sendbuff, std::vector<T *> &recvbuff,
-                   uint count, Operation op);
+    void AllReduce(const std::vector<T *> &sendbuff, std::vector<T *> &recvbuff, const std::size_t &count, const Operation &op);
 
     /**
      * @brief Broadcast operation: distribute data from root to all GPUs
@@ -75,8 +75,7 @@ class MCCL {
      * @param count Number of elements per buffer
      * @param root Source GPU ID (0-indexed)
      */
-    void Broadcast(const std::vector<T *> &sendbuff, std::vector<T *> &recvbuff,
-                   uint count, uint root);
+    void Broadcast(const std::vector<T *> &sendbuff, std::vector<T *> &recvbuff, const std::size_t &count, const std::size_t &root);
 
     /**
      * @brief Reduce operation: reduce data from all GPUs to root
@@ -87,8 +86,7 @@ class MCCL {
      * @param root Destination GPU ID (0-indexed)
      * @param op Reduction operation to perform
      */
-    void Reduce(const std::vector<T *> &sendbuff, std::vector<T *> &recvbuff,
-                uint count, uint root, Operation op);
+    void Reduce(const std::vector<T *> &sendbuff, std::vector<T *> &recvbuff, const std::size_t &count, const std::size_t &root, const Operation &op);
 
     /**
      * @brief All-gather operation: gather data from all GPUs to all GPUs
@@ -97,8 +95,7 @@ class MCCL {
      * @param recvbuff Output buffers on each GPU (count*gpus elements each)
      * @param count Number of elements per input buffer
      */
-    void AllGather(const std::vector<T *> &sendbuff, std::vector<T *> &recvbuff,
-                   uint count);
+    void AllGather(const std::vector<T *> &sendbuff, std::vector<T *> &recvbuff, const std::size_t &count);
 
     /**
      * @brief Reduce-scatter operation: reduce and scatter chunks to GPUs
@@ -108,22 +105,21 @@ class MCCL {
      * @param count Number of elements per output buffer (input is count*gpus)
      * @param op Reduction operation to perform
      */
-    void ReduceScatter(const std::vector<T *> &sendbuff,
-                       std::vector<T *> &recvbuff, uint count, Operation op);
+    void ReduceScatter(const std::vector<T *> &sendbuff, std::vector<T *> &recvbuff, const std::size_t &count, const Operation &op);
 
     /**
      * @brief Get number of GPUs
      *
      * @return Number of available GPUs
      */
-    uint GetGpus() const;
+    const std::size_t &GetGpus() const;
 
     /**
      * @brief Get reference to CUDA streams vector
      *
      * @return Reference to streams vector
      */
-    std::vector<cudaStream_t> &GetStreams();
+    const std::vector<cudaStream_t> &GetStreams() const;
 };
 
 #endif

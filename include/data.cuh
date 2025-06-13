@@ -42,7 +42,7 @@ void InitializeMatrix(T *matrix, int rows, int cols);
  * @param n   Number of elements in the vector
  */
 template <typename T>
-void VerifyVector(const T *d_y, const T *h_y, size_t n);
+void VerifyVector(const T *h_vector, const T *d_vector, size_t n);
 
 /**
  * @brief Verify the results of a matrix operation
@@ -54,6 +54,6 @@ void VerifyVector(const T *d_y, const T *h_y, size_t n);
  * @param n Number of columns in the matrix
  */
 template <typename T>
-void VerifyMatrix(const T *cpuC, const T *gpuC, int m, int n);
+void VerifyMatrix(const T *h_matrix, const T *d_matrix, int m, int n);
 
 #endif

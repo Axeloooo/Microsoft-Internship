@@ -48,7 +48,7 @@ class CudaTimer {
      * @param flops A reference to a double where the FLOPS (floating-point
      * operations per second) will be stored.
      */
-    CudaTimer(const std::string &label, const size_t &bytes, double &flops);
+    CudaTimer(const std::string &label, const size_t &bytes, const double &flops);
 
     /**
      * @brief Destroy the Cuda Timer object

@@ -17,15 +17,12 @@
 
 #include "timer.cuh"
 
-CudaTimer::CudaTimer(const std::string &label, const size_t &bytes)
-    : label_(label), bytes_(bytes), flops_(0), elapsed_ms_(0.0f) {
+CudaTimer::CudaTimer(const std::string &label, const size_t &bytes) : label_(label), bytes_(bytes), flops_(0), elapsed_ms_(0.0f) {
     cudaEventCreate(&start_event_);
     cudaEventCreate(&stop_event_);
 }
 
-CudaTimer::CudaTimer(const std::string &label, const size_t &bytes,
-                     double &flops)
-    : label_(label), bytes_(bytes), flops_(flops), elapsed_ms_(0.0f) {
+CudaTimer::CudaTimer(const std::string &label, const size_t &bytes, double &flops) : label_(label), bytes_(bytes), flops_(flops), elapsed_ms_(0.0f) {
     cudaEventCreate(&start_event_);
     cudaEventCreate(&stop_event_);
 }

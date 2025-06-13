@@ -68,8 +68,7 @@ int main(int argc, char **argv) {
             if (i != j) {
                 CHECK_CUDA(cudaSetDevice(devices[i]));
                 int can_access;
-                CHECK_CUDA(cudaDeviceCanAccessPeer(&can_access, devices[i],
-                                                   devices[j]));
+                CHECK_CUDA(cudaDeviceCanAccessPeer(&can_access, devices[i], devices[j]));
                 if (can_access) {
                     CHECK_CUDA(cudaDeviceEnablePeerAccess(devices[j], 0));
                 }
@@ -85,17 +84,14 @@ int main(int argc, char **argv) {
 
     // Step 1: Reduce - accumulate all data to GPU 0 (root)
     CHECK_CUDA(cudaSetDevice(devices[ROOT]));
-    CHECK_CUDA(
-        cudaMemcpy(d_out[ROOT], d_in[ROOT], BYTES, cudaMemcpyDeviceToDevice));
+    CHECK_CUDA(cudaMemcpy(d_out[ROOT], d_in[ROOT], BYTES, cudaMemcpyDeviceToDevice));
 
     for (int i = 0; i < NUM_GPUS; i++) {
         if (i != ROOT) {
             CHECK_CUDA(cudaSetDevice(devices[ROOT]));
-            CHECK_CUDA(cudaMemcpyPeerAsync(d_tmp[ROOT], devices[ROOT], d_in[i],
-                                           devices[i], BYTES, streams[ROOT]));
+            CHECK_CUDA(cudaMemcpyPeerAsync(d_tmp[ROOT], devices[ROOT], d_in[i], devices[i], BYTES, streams[ROOT]));
             CHECK_CUDA(cudaStreamSynchronize(streams[ROOT]));
-            vectorAdd<<<GRID, BLOCK, 0, streams[ROOT]>>>(
-                d_out[ROOT], d_tmp[ROOT], d_out[ROOT], N);
+            vectorAdd<<<GRID, BLOCK, 0, streams[ROOT]>>>(d_out[ROOT], d_tmp[ROOT], d_out[ROOT], N);
             CHECK_CUDA(cudaGetLastError());
         }
     }
@@ -104,8 +100,7 @@ int main(int argc, char **argv) {
     for (uint i = 0; i < NUM_GPUS; i++) {
         if (i != ROOT) {
             CHECK_CUDA(cudaSetDevice(devices[i]));
-            CHECK_CUDA(cudaMemcpyPeerAsync(d_out[i], devices[i], d_out[ROOT],
-                                           devices[ROOT], BYTES, streams[i]));
+            CHECK_CUDA(cudaMemcpyPeerAsync(d_out[i], devices[i], d_out[ROOT], devices[ROOT], BYTES, streams[i]));
         }
     }
 
@@ -120,21 +115,17 @@ int main(int argc, char **argv) {
     for (int i = 0; i < NUM_GPUS; i++) {
         CHECK_CUDA(cudaSetDevice(devices[i]));
         float *verify_data = new float[N];
-        CHECK_CUDA(
-            cudaMemcpy(verify_data, d_out[i], BYTES, cudaMemcpyDeviceToHost));
+        CHECK_CUDA(cudaMemcpy(verify_data, d_out[i], BYTES, cudaMemcpyDeviceToHost));
 
         bool success = true;
         for (int j = 0; j < N; j++) {
             if (abs(verify_data[j] - h_expected[j]) > 1e-5) {
                 success = false;
-                std::cout << "Mismatch at GPU " << i << ", index " << j
-                          << ": expected " << h_expected[j] << ", got "
-                          << verify_data[j] << std::endl;
+                std::cout << "Mismatch at GPU " << i << ", index " << j << ": expected " << h_expected[j] << ", got " << verify_data[j] << std::endl;
                 break;
             }
         }
-        std::cout << "Device " << devices[i] << ": "
-                  << (success ? "PASS" : "FAIL") << std::endl;
+        std::cout << "Device " << devices[i] << ": " << (success ? "PASS" : "FAIL") << std::endl;
         delete[] verify_data;
     }
 

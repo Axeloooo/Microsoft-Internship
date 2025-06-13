@@ -15,48 +15,46 @@
 #include <cublas_v2.h>
 #include <cuda_runtime.h>
 
+#include <cstdlib>
 #include <iostream>
 
 /**
  * @brief Macro to check CUDA function calls for errors.
  *
  */
-#define CHECK_CUDA(call)                                                 \
-    {                                                                    \
-        cudaError_t err = (call);                                        \
-        if (err != cudaSuccess) {                                        \
-            std::cerr << "CUDA error in " << __FILE__ << ":" << __LINE__ \
-                      << ": " << cudaGetErrorString(err) << std::endl;   \
-            std::exit(EXIT_FAILURE);                                     \
-        }                                                                \
+#define CHECK_CUDA(call)                                                                                                  \
+    {                                                                                                                     \
+        cudaError_t err = (call);                                                                                         \
+        if (err != cudaSuccess) {                                                                                         \
+            std::cerr << "CUDA error in " << __FILE__ << ":" << __LINE__ << ": " << cudaGetErrorString(err) << std::endl; \
+            std::exit(EXIT_FAILURE);                                                                                      \
+        }                                                                                                                 \
     }
 
 /**
  * @brief Macro to check cuBLAS function calls for errors.
  *
  */
-#define CHECK_CUBLAS(call)                                                 \
-    {                                                                      \
-        cublasStatus_t status = (call);                                    \
-        if (status != CUBLAS_STATUS_SUCCESS) {                             \
-            std::cerr << "cuBLAS error in " << __FILE__ << ":" << __LINE__ \
-                      << ": error code " << status << std::endl;           \
-            std::exit(EXIT_FAILURE);                                       \
-        }                                                                  \
+#define CHECK_CUBLAS(call)                                                                                            \
+    {                                                                                                                 \
+        cublasStatus_t status = (call);                                                                               \
+        if (status != CUBLAS_STATUS_SUCCESS) {                                                                        \
+            std::cerr << "cuBLAS error in " << __FILE__ << ":" << __LINE__ << ": error code " << status << std::endl; \
+            std::exit(EXIT_FAILURE);                                                                                  \
+        }                                                                                                             \
     }
 
 /**
  * @brief Macro to check NCCL function calls for errors.
  *
  */
-#define NCCLCHECK(cmd)                                                    \
-    do {                                                                  \
-        ncclResult_t res = cmd;                                           \
-        if (res != ncclSuccess) {                                         \
-            printf("Failed, NCCL error %s:%d '%s'\n", __FILE__, __LINE__, \
-                   ncclGetErrorString(res));                              \
-            exit(EXIT_FAILURE);                                           \
-        }                                                                 \
+#define CHECK_NCCL(cmd)                                                                                                               \
+    do {                                                                                                                              \
+        ncclResult_t res = cmd;                                                                                                       \
+        if (res != ncclSuccess) {                                                                                                     \
+            std::cerr << "Failed, NCCL error " << __FILE__ << ":" << __LINE__ << " '" << ncclGetErrorString(res) << "'" << std::endl; \
+            std::exit(EXIT_FAILURE);                                                                                                  \
+        }                                                                                                                             \
     } while (0)
 
 #endif
