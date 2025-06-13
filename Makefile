@@ -3,8 +3,10 @@
 # ------------------------------------------------------------------------
 
 # Compiler and flags
-NVCC        := nvcc
+NVCC        := nvcc	
 NVCCFLAGS   := -I include -arch=sm_90
+MPI_INCLUDE = -I /usr/local/mpi/include
+MPI_LIB = -L/usr/local/mpi/lib -lmpi
 
 # cuBLAS linking flags (only for axpy and dot)
 CUBLAS_LIBS := -lcublas
@@ -28,6 +30,7 @@ ALLGATHER_SRC := $(SRC_DIR)/collectives/allgather.cu
 ALLREDUCE_SRC := $(SRC_DIR)/collectives/allreduce.cu
 REDUCE_COLLECTIVE_SRC := $(SRC_DIR)/collectives/reduce.cu
 REDUCESCATTER_SRC := $(SRC_DIR)/collectives/reducescatter.cu
+MPI_BROADCAST_SRC := $(SRC_DIR)/collectives/mpi_broadcast.cu
 
 # Utility source files
 TIMER_SRC   := $(SRC_DIR)/utils/timer.cu
@@ -44,12 +47,13 @@ ALLGATHER_BIN := $(BUILD_DIR)/allgather
 ALLREDUCE_BIN := $(BUILD_DIR)/allreduce
 REDUCE_COLLECTIVE_BIN := $(BUILD_DIR)/reducecollective
 REDUCESCATTER_BIN := $(BUILD_DIR)/reducescatter
+MPI_BROADCAST_BIN := $(BUILD_DIR)/mpi_broadcast
 
 # ------------------------------------------------------------------------
 # 1) Top‐level “build” target (for CI)
 # ------------------------------------------------------------------------
 .PHONY: build
-build: $(REDUCE_BIN) $(AXPY_BIN) $(DOT_BIN) $(ADD_BIN) $(GEMM_BIN) $(BROADCAST_BIN) $(ALLGATHER_BIN) $(ALLREDUCE_BIN) $(REDUCE_COLLECTIVE_BIN) $(REDUCESCATTER_BIN)
+build: $(REDUCE_BIN) $(AXPY_BIN) $(DOT_BIN) $(ADD_BIN) $(GEMM_BIN) $(BROADCAST_BIN) $(ALLGATHER_BIN) $(ALLREDUCE_BIN) $(REDUCE_COLLECTIVE_BIN) $(REDUCESCATTER_BIN) $(MPI_BROADCAST_BIN)
 	@echo "All modules built. (No execution.)"
 
 # ------------------------------------------------------------------------
@@ -109,6 +113,12 @@ reducescatter: $(REDUCESCATTER_BIN)
 	@echo "Running reducescatter module…"
 	@$(REDUCESCATTER_BIN)
 
+.PHONY: mpi_broadcast
+mpi_broadcast: $(MPI_BROADCAST_BIN)
+	@echo "Running MPI broadcast module…"
+	@echo "Note: Use 'mpirun -np <num_processes> ./build/mpi_broadcast' to run with multiple MPI ranks"
+	@$(MPI_BROADCAST_BIN)
+
 # ------------------------------------------------------------------------
 # 3) Rules to compile each binary
 #
@@ -165,6 +175,11 @@ $(REDUCESCATTER_BIN): $(REDUCESCATTER_SRC) $(COLLECTIVES_SRC) $(TIMER_SRC) $(DAT
 	@echo "Building reducescatter module…"
 	@mkdir -p $(BUILD_DIR)
 	$(NVCC) $(NVCCFLAGS) -o $@ $^
+
+$(MPI_BROADCAST_BIN): $(MPI_BROADCAST_SRC) $(COLLECTIVES_SRC) $(TIMER_SRC) $(DATA_SRC)
+	@echo "Building MPI broadcast module…"
+	@mkdir -p $(BUILD_DIR)
+	$(NVCC) $(NVCCFLAGS) $(MPI_INCLUDE) $(MPI_LIB) -o $@ $^
 
 # ------------------------------------------------------------------------
 # 4) Clean everything
