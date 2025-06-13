@@ -14,19 +14,16 @@
 #define BLOCK_SIZE 256
 
 void checkResult(const float &cpuResult, const float &gpuResult) {
-    float diff = std::fabs(cpuResult - gpuResult);
-    float relError = diff / std::fabs(cpuResult);
-    if (relError > 1e-2) {
+    const float diff = std::fabs(cpuResult - gpuResult);
+    const float relError = diff / std::fabs(cpuResult);
+    if (relError > 1e-2f) {
         std::cerr << "Results do not match!" << std::endl;
-        std::cerr << "CPU result: " << cpuResult
-                  << ", GPU result: " << gpuResult
-                  << " (relative error: " << relError << ")" << std::endl;
+        std::cerr << "CPU result: " << cpuResult << ", GPU result: " << gpuResult << " (relative error: " << relError << ")" << std::endl;
     }
-    std::cout << "Results are correct! (relative error: " << relError * 100
-              << "%)" << std::endl;
+    std::cout << "Results are correct! (relative error: " << relError * 100.0f << "%)" << std::endl;
 }
 
-void dotProductCpu(const float *a, const float *b, float *c, int n) {
+void dotProductCpu(const float *a, const float *b, float *c, const int n) {
     double sum = 0.0;
     for (int i = 0; i < n; ++i) sum += static_cast<double>(a[i]) * b[i];
     *c = static_cast<float>(sum);
@@ -82,9 +79,7 @@ int main() {
         CHECK_CUDA(cudaDeviceSynchronize());
 
         CHECK_CUDA(cudaMemset(d_c_gpu, 0, sizeof(float)));
-        optimizedSdot<BLOCK_SIZE>
-            <<<optimGrid, block, BLOCK_SIZE * sizeof(float)>>>(d_a, d_b,
-                                                               d_c_gpu, N);
+        optimizedSdot<BLOCK_SIZE><<<optimGrid, block, BLOCK_SIZE * sizeof(float)>>>(d_a, d_b, d_c_gpu, N);
         CHECK_CUDA(cudaGetLastError());
         CHECK_CUDA(cudaDeviceSynchronize());
 
@@ -103,8 +98,7 @@ int main() {
     naiveGpuTimer.Print();
 
     // Copy result back to host
-    CHECK_CUDA(
-        cudaMemcpy(&h_c_gpu, d_c_gpu, sizeof(float), cudaMemcpyDeviceToHost));
+    CHECK_CUDA(cudaMemcpy(&h_c_gpu, d_c_gpu, sizeof(float), cudaMemcpyDeviceToHost));
 
     // Check results
     checkResult(h_c_cpu, h_c_gpu);
@@ -113,16 +107,14 @@ int main() {
     CudaTimer optimizedGpuTimer("Optimized Dot Product GPU Kernel", totalBytes);
     optimizedGpuTimer.Start();
     CHECK_CUDA(cudaMemset(d_c_gpu, 0, sizeof(float)));
-    optimizedSdot<BLOCK_SIZE><<<optimGrid, block, BLOCK_SIZE * sizeof(float)>>>(
-        d_a, d_b, d_c_gpu, N);
+    optimizedSdot<BLOCK_SIZE><<<optimGrid, block, BLOCK_SIZE * sizeof(float)>>>(d_a, d_b, d_c_gpu, N);
     CHECK_CUDA(cudaGetLastError());
     CHECK_CUDA(cudaDeviceSynchronize());
     optimizedGpuTimer.Stop();
     optimizedGpuTimer.Print();
 
     // Copy result back to host
-    CHECK_CUDA(
-        cudaMemcpy(&h_c_gpu, d_c_gpu, sizeof(float), cudaMemcpyDeviceToHost));
+    CHECK_CUDA(cudaMemcpy(&h_c_gpu, d_c_gpu, sizeof(float), cudaMemcpyDeviceToHost));
 
     // Check results
     checkResult(h_c_cpu, h_c_gpu);

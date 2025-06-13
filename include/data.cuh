@@ -20,7 +20,7 @@
  * @param n  Number of elements in the vector
  */
 template <typename T>
-void InitVector(T *vector, int n);
+void InitVector(T *vector, const std::size_t &n);
 
 /**
  * @brief Initialize a matrix with random values
@@ -31,7 +31,7 @@ void InitVector(T *vector, int n);
  * @param cols  Number of columns in the matrix
  */
 template <typename T>
-void InitializeMatrix(T *matrix, int rows, int cols);
+void InitializeMatrix(T *matrix, const std::size_t &rows, const std::size_t &cols);
 
 /**
  * @brief Verify the results of a vector operation
@@ -42,7 +42,7 @@ void InitializeMatrix(T *matrix, int rows, int cols);
  * @param n   Number of elements in the vector
  */
 template <typename T>
-void VerifyVector(const T *h_vector, const T *d_vector, size_t n);
+void VerifyVector(const T *h_vector, const T *d_vector, const std::size_t &n);
 
 /**
  * @brief Verify the results of a matrix operation
@@ -54,6 +54,6 @@ void VerifyVector(const T *h_vector, const T *d_vector, size_t n);
  * @param n Number of columns in the matrix
  */
 template <typename T>
-void VerifyMatrix(const T *h_matrix, const T *d_matrix, int m, int n);
+void VerifyMatrix(const T *h_matrix, const T *d_matrix, const std::size_t &m, const std::size_t &n);
 
 #endif

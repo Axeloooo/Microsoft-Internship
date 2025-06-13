@@ -27,7 +27,7 @@ class CudaTimer {
     cudaEvent_t start_event_;
     cudaEvent_t stop_event_;
     std::string label_;
-    size_t bytes_;
+    std::size_t bytes_;
     double flops_;
     float elapsed_ms_;
 
@@ -38,17 +38,16 @@ class CudaTimer {
      * @param label A label for the timer, useful for debugging and logging.
      * @param bytes The number of bytes processed during the operation.
      */
-    CudaTimer(const std::string &label, const size_t &bytes);
+    CudaTimer(const std::string &label, const std::size_t &bytes);
 
     /**
      * @brief Construct a new Cuda Timer object
      *
      * @param label A label for the timer, useful for debugging and logging.
      * @param bytes The number of bytes processed during the operation.
-     * @param flops A reference to a double where the FLOPS (floating-point
-     * operations per second) will be stored.
+     * @param flops The FLOPS (floating-point operations per second) value.
      */
-    CudaTimer(const std::string &label, const size_t &bytes, const double &flops);
+    CudaTimer(const std::string &label, const std::size_t &bytes, const double &flops);
 
     /**
      * @brief Destroy the Cuda Timer object

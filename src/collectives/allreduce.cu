@@ -11,8 +11,8 @@
 #define GRID ((N + BLOCK - 1) / BLOCK)
 #define ROOT 0
 
-__global__ void vectorAdd(float *a, float *b, float *c, int n) {
-    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+__global__ void vectorAdd(const float *a, const float *b, float *c, const int n) {
+    const int idx = blockIdx.x * blockDim.x + threadIdx.x;
     if (idx < n) {
         c[idx] = a[idx] + b[idx];
     }

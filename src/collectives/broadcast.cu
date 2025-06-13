@@ -38,7 +38,7 @@ int main(int argc, char **argv) {
     CHECK_CUDA(cudaMemcpy(sendbuff[ROOT], h_a, BYTES, cudaMemcpyHostToDevice));
 
     // Perform broadcast operation using MCCL
-    mccl.broadcast(sendbuff, recvbuff, N, ROOT);
+    mccl.Broadcast(sendbuff, recvbuff, N, ROOT);
 
     // Verify results
     std::cout << "Broadcast completed. Verifying results...\n";

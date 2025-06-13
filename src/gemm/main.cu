@@ -14,8 +14,8 @@
 #define K 1024
 #define BLOCK_DIM 16
 
-void sgemmCpu(int m, int n, int k, float alpha, const float *A, const float *B,
-              float beta, float *C) {
+void sgemmCpu(const int m, const int n, const int k, const float alpha, const float *A, const float *B,
+              const float beta, float *C) {
     for (int i = 0; i < m; ++i) {
         for (int j = 0; j < n; ++j) {
             float tmp = 0.0f;

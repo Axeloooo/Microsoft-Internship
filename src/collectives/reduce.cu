@@ -63,7 +63,7 @@ int main(int argc, char **argv) {
 
     // Perform reduce operation using MCCL (SUM operation)
     Operation op = SUM;
-    mccl.reduce(sendbuff, recvbuff, N, ROOT_GPU, op);
+    mccl.Reduce(sendbuff, recvbuff, N, ROOT_GPU, op);
 
     // Verify results - only check root GPU
     std::cout << "Reduce completed. Verifying result on root GPU " << ROOT_GPU

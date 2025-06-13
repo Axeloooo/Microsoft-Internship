@@ -77,9 +77,8 @@ void VerifyVector(const T *h_vector, const T *d_vector, const std::size_t &n) {
  */
 template <typename T>
 void VerifyMatrix(const T *h_matrix, const T *d_matrix, const std::size_t &m, const std::size_t &n) {
-    double diff = 0.0;
     for (std::size_t i = 0; i < m * n; i++) {
-        diff = std::fabs(d_matrix[i] - h_matrix[i]);
+        const std::size_t diff = std::fabs(d_matrix[i] - h_matrix[i]);
         if (diff > 0.01) {
             std::cerr << "Results don't match!" << std::endl;
             return;
@@ -87,3 +86,16 @@ void VerifyMatrix(const T *h_matrix, const T *d_matrix, const std::size_t &m, co
     }
     std::cout << "Results match!" << std::endl;
 }
+
+template void InitVector<float>(float *vector, const std::size_t &n);
+template void InitVector<double>(double *vector, const std::size_t &n);
+template void InitVector<int>(int *vector, const std::size_t &n);
+
+template void InitializeMatrix<float>(float *matrix, const std::size_t &rows, const std::size_t &cols);
+template void InitializeMatrix<double>(double *matrix, const std::size_t &rows, const std::size_t &cols);
+
+template void VerifyVector<float>(const float *h_vector, const float *d_vector, const std::size_t &n);
+template void VerifyVector<double>(const double *h_vector, const double *d_vector, const std::size_t &n);
+
+template void VerifyMatrix<float>(const float *h_matrix, const float *d_matrix, const std::size_t &m, const std::size_t &n);
+template void VerifyMatrix<double>(const double *h_matrix, const double *d_matrix, const std::size_t &m, const std::size_t &n);

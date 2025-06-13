@@ -8,31 +8,30 @@
 #include "reduction.cuh"
 #include "timer.cuh"
 
-#define N 4194304
-#define BLOCK_SIZE 256
-
 void checkResult(const int &cpuResult, const int &gpuResult) {
     if (std::fabs(cpuResult - gpuResult) > 1e-5) {
         std::cerr << "Results do not match!" << std::endl;
-        std::cerr << "CPU result: " << cpuResult
-                  << ", GPU result: " << gpuResult << std::endl;
+        std::cerr << "CPU result: " << cpuResult << ", GPU result: " << gpuResult << std::endl;
         std::exit(EXIT_FAILURE);
     }
     std::cout << "Results are correct!" << std::endl;
 }
 
-void reductionCpu(const int *h_in_data, int *h_out_data, unsigned int n) {
+void reductionCpu(const int *h_in_data, int *h_out_data, const unsigned int n) {
     for (unsigned int i = 0; i < n; i++) {
         *h_out_data += h_in_data[i];
     }
 }
 
 int main() {
+    const std::size_t N = 4194304;
+    const std::size_t BLOCK_SIZE = 256;
+
     dim3 block(BLOCK_SIZE);
     dim3 grid((N + BLOCK_SIZE - 1) / BLOCK_SIZE);
     const int numBlocks = (N + (2 * BLOCK_SIZE) - 1) / (2 * BLOCK_SIZE);
 
-    size_t bytes = N * sizeof(int);
+    std::size_t bytes = N * sizeof(int);
 
     int *h_in = new int[N];
     int h_out_cpu, h_out_gpu = 0;
@@ -66,38 +65,32 @@ int main() {
         CHECK_CUDA(cudaDeviceSynchronize());
 
         CHECK_CUDA(cudaMemset(d_out, 0, sizeof(int)));
-        interleaveAddressingReduce<<<grid, block, BLOCK_SIZE * sizeof(int)>>>(
-            d_in, d_out);
+        interleaveAddressingReduce<<<grid, block, BLOCK_SIZE * sizeof(int)>>>(d_in, d_out);
         CHECK_CUDA(cudaGetLastError());
         CHECK_CUDA(cudaDeviceSynchronize());
 
         CHECK_CUDA(cudaMemset(d_out, 0, sizeof(int)));
-        sequenceAddressingReduce<<<grid, block, BLOCK_SIZE * sizeof(int)>>>(
-            d_in, d_out);
+        sequenceAddressingReduce<<<grid, block, BLOCK_SIZE * sizeof(int)>>>(d_in, d_out);
         CHECK_CUDA(cudaGetLastError());
         CHECK_CUDA(cudaDeviceSynchronize());
 
         CHECK_CUDA(cudaMemset(d_out, 0, sizeof(int)));
-        addDuringLoadReduce<<<numBlocks, block, BLOCK_SIZE * sizeof(int)>>>(
-            d_in, d_out);
+        addDuringLoadReduce<<<numBlocks, block, BLOCK_SIZE * sizeof(int)>>>(d_in, d_out);
         CHECK_CUDA(cudaGetLastError());
         CHECK_CUDA(cudaDeviceSynchronize());
 
         CHECK_CUDA(cudaMemset(d_out, 0, sizeof(int)));
-        unrollLastWarpReduce<<<numBlocks, block, BLOCK_SIZE * sizeof(int)>>>(
-            d_in, d_out);
+        unrollLastWarpReduce<<<numBlocks, block, BLOCK_SIZE * sizeof(int)>>>(d_in, d_out);
         CHECK_CUDA(cudaGetLastError());
         CHECK_CUDA(cudaDeviceSynchronize());
 
         CHECK_CUDA(cudaMemset(d_out, 0, sizeof(int)));
-        completelyUnrollReduce<BLOCK_SIZE>
-            <<<numBlocks, block, BLOCK_SIZE * sizeof(int)>>>(d_in, d_out);
+        completelyUnrollReduce<BLOCK_SIZE><<<numBlocks, block, BLOCK_SIZE * sizeof(int)>>>(d_in, d_out);
         CHECK_CUDA(cudaGetLastError());
         CHECK_CUDA(cudaDeviceSynchronize());
 
         CHECK_CUDA(cudaMemset(d_out, 0, sizeof(int)));
-        multipleElementsReduce<BLOCK_SIZE>
-            <<<numBlocks, block, BLOCK_SIZE * sizeof(int)>>>(d_in, d_out, N);
+        multipleElementsReduce<BLOCK_SIZE><<<numBlocks, block, BLOCK_SIZE * sizeof(int)>>>(d_in, d_out, N);
         CHECK_CUDA(cudaGetLastError());
         CHECK_CUDA(cudaDeviceSynchronize());
     }
@@ -113,27 +106,23 @@ int main() {
     naiveReduceTimer.Print();
 
     // Copy data from device to host
-    CHECK_CUDA(
-        cudaMemcpy(&h_out_gpu, d_out, sizeof(int), cudaMemcpyDeviceToHost));
+    CHECK_CUDA(cudaMemcpy(&h_out_gpu, d_out, sizeof(int), cudaMemcpyDeviceToHost));
 
     // Check results
     checkResult(h_out_cpu, h_out_gpu);
 
     // Perform interleaved addressing reduce using CUDA kernel
-    CudaTimer interleavedReduceTimer("Interleaved Addressing Reduce GPU",
-                                     bytes);
+    CudaTimer interleavedReduceTimer("Interleaved Addressing Reduce GPU", bytes);
     interleavedReduceTimer.Start();
     CHECK_CUDA(cudaMemset(d_out, 0, sizeof(int)));
-    interleaveAddressingReduce<<<grid, block, BLOCK_SIZE * sizeof(int)>>>(
-        d_in, d_out);
+    interleaveAddressingReduce<<<grid, block, BLOCK_SIZE * sizeof(int)>>>(d_in, d_out);
     CHECK_CUDA(cudaGetLastError());
     CHECK_CUDA(cudaDeviceSynchronize());
     interleavedReduceTimer.Stop();
     interleavedReduceTimer.Print();
 
     // Copy data from device to host
-    CHECK_CUDA(
-        cudaMemcpy(&h_out_gpu, d_out, sizeof(int), cudaMemcpyDeviceToHost));
+    CHECK_CUDA(cudaMemcpy(&h_out_gpu, d_out, sizeof(int), cudaMemcpyDeviceToHost));
 
     // Check results
     checkResult(h_out_cpu, h_out_gpu);
@@ -149,8 +138,7 @@ int main() {
     sequenceReduceTimer.Print();
 
     // Copy data from device to host
-    CHECK_CUDA(
-        cudaMemcpy(&h_out_gpu, d_out, sizeof(int), cudaMemcpyDeviceToHost));
+    CHECK_CUDA(cudaMemcpy(&h_out_gpu, d_out, sizeof(int), cudaMemcpyDeviceToHost));
 
     // Check results
     checkResult(h_out_cpu, h_out_gpu);
@@ -159,16 +147,14 @@ int main() {
     CudaTimer addDuringLoadReduceTimer("Add During Load Reduce GPU", bytes);
     addDuringLoadReduceTimer.Start();
     CHECK_CUDA(cudaMemset(d_out, 0, sizeof(int)));
-    addDuringLoadReduce<<<numBlocks, block, BLOCK_SIZE * sizeof(int)>>>(d_in,
-                                                                        d_out);
+    addDuringLoadReduce<<<numBlocks, block, BLOCK_SIZE * sizeof(int)>>>(d_in, d_out);
     CHECK_CUDA(cudaGetLastError());
     CHECK_CUDA(cudaDeviceSynchronize());
     addDuringLoadReduceTimer.Stop();
     addDuringLoadReduceTimer.Print();
 
     // Copy data from device to host
-    CHECK_CUDA(
-        cudaMemcpy(&h_out_gpu, d_out, sizeof(int), cudaMemcpyDeviceToHost));
+    CHECK_CUDA(cudaMemcpy(&h_out_gpu, d_out, sizeof(int), cudaMemcpyDeviceToHost));
 
     // Check results
     checkResult(h_out_cpu, h_out_gpu);
@@ -177,54 +163,46 @@ int main() {
     CudaTimer unrollLastWarpReduceTimer("Unroll Last Warp Reduce GPU", bytes);
     unrollLastWarpReduceTimer.Start();
     CHECK_CUDA(cudaMemset(d_out, 0, sizeof(int)));
-    unrollLastWarpReduce<<<numBlocks, block, BLOCK_SIZE * sizeof(int)>>>(d_in,
-                                                                         d_out);
+    unrollLastWarpReduce<<<numBlocks, block, BLOCK_SIZE * sizeof(int)>>>(d_in, d_out);
     CHECK_CUDA(cudaGetLastError());
     CHECK_CUDA(cudaDeviceSynchronize());
     unrollLastWarpReduceTimer.Stop();
     unrollLastWarpReduceTimer.Print();
 
     // Copy data from device to host
-    CHECK_CUDA(
-        cudaMemcpy(&h_out_gpu, d_out, sizeof(int), cudaMemcpyDeviceToHost));
+    CHECK_CUDA(cudaMemcpy(&h_out_gpu, d_out, sizeof(int), cudaMemcpyDeviceToHost));
 
     // Check results
     checkResult(h_out_cpu, h_out_gpu);
 
     // Perform completely unrolled warp reduce using CUDA kernel
-    CudaTimer completelyUnrolledWarpReduceTimer(
-        "Completely Unrolled Warp Reduce GPU", bytes);
+    CudaTimer completelyUnrolledWarpReduceTimer("Completely Unrolled Warp Reduce GPU", bytes);
     completelyUnrolledWarpReduceTimer.Start();
     CHECK_CUDA(cudaMemset(d_out, 0, sizeof(int)));
-    completelyUnrollReduce<BLOCK_SIZE>
-        <<<numBlocks, block, BLOCK_SIZE * sizeof(int)>>>(d_in, d_out);
+    completelyUnrollReduce<BLOCK_SIZE><<<numBlocks, block, BLOCK_SIZE * sizeof(int)>>>(d_in, d_out);
     CHECK_CUDA(cudaGetLastError());
     CHECK_CUDA(cudaDeviceSynchronize());
     completelyUnrolledWarpReduceTimer.Stop();
     completelyUnrolledWarpReduceTimer.Print();
 
     // Copy data from device to host
-    CHECK_CUDA(
-        cudaMemcpy(&h_out_gpu, d_out, sizeof(int), cudaMemcpyDeviceToHost));
+    CHECK_CUDA(cudaMemcpy(&h_out_gpu, d_out, sizeof(int), cudaMemcpyDeviceToHost));
 
     // Check results
     checkResult(h_out_cpu, h_out_gpu);
 
     // Perform multiple elements reduce using CUDA kernel
-    CudaTimer multipleElementsReduceTimer("Multiple Elements Reduce GPU",
-                                          bytes);
+    CudaTimer multipleElementsReduceTimer("Multiple Elements Reduce GPU", bytes);
     multipleElementsReduceTimer.Start();
     CHECK_CUDA(cudaMemset(d_out, 0, sizeof(int)));
-    multipleElementsReduce<BLOCK_SIZE>
-        <<<numBlocks, block, BLOCK_SIZE * sizeof(int)>>>(d_in, d_out, N);
+    multipleElementsReduce<BLOCK_SIZE><<<numBlocks, block, BLOCK_SIZE * sizeof(int)>>>(d_in, d_out, N);
     CHECK_CUDA(cudaGetLastError());
     CHECK_CUDA(cudaDeviceSynchronize());
     multipleElementsReduceTimer.Stop();
     multipleElementsReduceTimer.Print();
 
     // Copy data from device to host
-    CHECK_CUDA(
-        cudaMemcpy(&h_out_gpu, d_out, sizeof(int), cudaMemcpyDeviceToHost));
+    CHECK_CUDA(cudaMemcpy(&h_out_gpu, d_out, sizeof(int), cudaMemcpyDeviceToHost));
 
     // Check results
     checkResult(h_out_cpu, h_out_gpu);

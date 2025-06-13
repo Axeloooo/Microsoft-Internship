@@ -11,6 +11,7 @@
 
 #include <cuda_runtime.h>
 
+#include <cassert>
 #include <cstddef>
 #include <cstdlib>
 #include <iostream>
@@ -26,8 +27,8 @@ constexpr std::size_t kBlockSize = 256;
  * @brief CUDA kernel for element-wise sum operation
  */
 template <typename T>
-__global__ void VectorSum(T *a, T *b, T *result, std::size_t n) {
-    std::size_t idx = blockIdx.x * blockDim.x + threadIdx.x;
+__global__ void VectorSum(const T *a, const T *b, T *result, const std::size_t n) {
+    const std::size_t idx = blockIdx.x * blockDim.x + threadIdx.x;
     if (idx < n) {
         result[idx] = a[idx] + b[idx];
     }
@@ -37,8 +38,8 @@ __global__ void VectorSum(T *a, T *b, T *result, std::size_t n) {
  * @brief CUDA kernel for element-wise product operation
  */
 template <typename T>
-__global__ void VectorProd(T *a, T *b, T *result, std::size_t n) {
-    std::size_t idx = blockIdx.x * blockDim.x + threadIdx.x;
+__global__ void VectorProd(const T *a, const T *b, T *result, const std::size_t n) {
+    const std::size_t idx = blockIdx.x * blockDim.x + threadIdx.x;
     if (idx < n) {
         result[idx] = a[idx] * b[idx];
     }
@@ -48,8 +49,8 @@ __global__ void VectorProd(T *a, T *b, T *result, std::size_t n) {
  * @brief CUDA kernel for element-wise minimum operation
  */
 template <typename T>
-__global__ void VectorMin(T *a, T *b, T *result, std::size_t n) {
-    std::size_t idx = blockIdx.x * blockDim.x + threadIdx.x;
+__global__ void VectorMin(const T *a, const T *b, T *result, const std::size_t n) {
+    const std::size_t idx = blockIdx.x * blockDim.x + threadIdx.x;
     if (idx < n) {
         result[idx] = (a[idx] < b[idx]) ? a[idx] : b[idx];
     }
@@ -59,8 +60,8 @@ __global__ void VectorMin(T *a, T *b, T *result, std::size_t n) {
  * @brief CUDA kernel for element-wise maximum operation
  */
 template <typename T>
-__global__ void VectorMax(T *a, T *b, T *result, std::size_t n) {
-    std::size_t idx = blockIdx.x * blockDim.x + threadIdx.x;
+__global__ void VectorMax(const T *a, const T *b, T *result, const std::size_t n) {
+    const std::size_t idx = blockIdx.x * blockDim.x + threadIdx.x;
     if (idx < n) {
         result[idx] = (a[idx] > b[idx]) ? a[idx] : b[idx];
     }
@@ -70,8 +71,8 @@ __global__ void VectorMax(T *a, T *b, T *result, std::size_t n) {
  * @brief CUDA kernel for scalar division (used for averaging)
  */
 template <typename T>
-__global__ void VectorDivideScalar(T *a, T divisor, T *result, std::size_t n) {
-    std::size_t idx = blockIdx.x * blockDim.x + threadIdx.x;
+__global__ void VectorDivideScalar(const T *a, const T divisor, T *result, const std::size_t n) {
+    const std::size_t idx = blockIdx.x * blockDim.x + threadIdx.x;
     if (idx < n) {
         result[idx] = a[idx] / divisor;
     }
@@ -88,7 +89,7 @@ __global__ void VectorDivideScalar(T *a, T divisor, T *result, std::size_t n) {
  * @param stream CUDA stream for asynchronous execution
  */
 template <typename T>
-void PerformReduction(const T *a, const T *b, const T *result, const std::size_t &n, const Operation &op, const cudaStream_t &stream) {
+void PerformReduction(const T *a, const T *b, T *result, const std::size_t &n, const Operation &op, const cudaStream_t &stream) {
     const std::size_t grid_size = (n + kBlockSize - 1) / kBlockSize;
 
     switch (op) {
@@ -108,7 +109,7 @@ void PerformReduction(const T *a, const T *b, const T *result, const std::size_t
             VectorSum<<<grid_size, kBlockSize, 0, stream>>>(a, b, result, n);
             break;
         default:
-            std::assert(false)
+            assert(false);
     }
 
     CHECK_CUDA(cudaGetLastError());
@@ -123,7 +124,7 @@ void PerformReduction(const T *a, const T *b, const T *result, const std::size_t
  * @param stream CUDA stream for asynchronous execution
  */
 template <typename T>
-void FinalizeAverage(const T *data, const std::size_t &n, const std::size_t &gpu_count, const cudaStream_t &stream) {
+void FinalizeAverage(T *data, const std::size_t &n, const std::size_t &gpu_count, const cudaStream_t &stream) {
     const std::size_t grid_size = (n + kBlockSize - 1) / kBlockSize;
     VectorDivideScalar<<<grid_size, kBlockSize, 0, stream>>>(data, static_cast<T>(gpu_count), data, n);
     CHECK_CUDA(cudaGetLastError());
@@ -162,7 +163,7 @@ MCCL<T>::MCCL(const std::size_t &gpus) : num_gpus_(gpus), streams_(gpus), tmpbuf
  */
 template <typename T>
 MCCL<T>::~MCCL() {
-    for (const std::size_t gpu = 0; gpu < num_gpus_; gpu++) {
+    for (std::size_t gpu = 0; gpu < num_gpus_; gpu++) {
         CHECK_CUDA(cudaSetDevice(static_cast<int>(gpu)));
         if (tmpbuff_[gpu] != nullptr) {
             CHECK_CUDA(cudaFree(tmpbuff_[gpu]));
@@ -209,7 +210,7 @@ void MCCL<T>::AllReduce(const std::vector<T *> &sendbuff, std::vector<T *> &recv
             CHECK_CUDA(cudaSetDevice(static_cast<int>(root)));
             CHECK_CUDA(cudaMemcpyPeerAsync(tmpbuff_[root], static_cast<int>(root), sendbuff[gpu], static_cast<int>(gpu), bytes, streams_[root]));
             CHECK_CUDA(cudaStreamSynchronize(streams_[root]));
-            PerformReduction(recvbuff[root], tmpbuff_[root], recvbuff[root], count, op, streams_[root], num_gpus_);
+            PerformReduction(recvbuff[root], tmpbuff_[root], recvbuff[root], count, op, streams_[root]);
         }
     }
 
@@ -292,7 +293,7 @@ void MCCL<T>::Reduce(const std::vector<T *> &sendbuff, std::vector<T *> &recvbuf
             CHECK_CUDA(cudaSetDevice(static_cast<int>(root)));
             CHECK_CUDA(cudaMemcpyPeerAsync(tmpbuff_[root], static_cast<int>(root), sendbuff[gpu], static_cast<int>(gpu), bytes, streams_[root]));
             CHECK_CUDA(cudaStreamSynchronize(streams_[root]));
-            PerformReduction(recvbuff[root], tmpbuff_[root], recvbuff[root], count, op, streams_[root], num_gpus_);
+            PerformReduction(recvbuff[root], tmpbuff_[root], recvbuff[root], count, op, streams_[root]);
         }
     }
 
@@ -361,7 +362,7 @@ void MCCL<T>::ReduceScatter(const std::vector<T *> &sendbuff, std::vector<T *> &
                 CHECK_CUDA(cudaSetDevice(static_cast<int>(gpu)));
                 CHECK_CUDA(cudaMemcpyPeerAsync(tmpbuff_[gpu], static_cast<int>(gpu), sendbuff[src] + offset, static_cast<int>(src), bytesPerChunk, streams_[gpu]));
                 CHECK_CUDA(cudaStreamSynchronize(streams_[gpu]));
-                PerformReduction(recvbuff[gpu], tmpbuff_[gpu], recvbuff[gpu], count, op, streams_[gpu], num_gpus_);
+                PerformReduction(recvbuff[gpu], tmpbuff_[gpu], recvbuff[gpu], count, op, streams_[gpu]);
             }
         }
 
@@ -399,6 +400,6 @@ const std::vector<cudaStream_t> &MCCL<T>::GetStreams() const {
 
 template class MCCL<float>;
 
-template void PerformReduction<float>(const float *a, const float *b, const float *result, const std::size_t &n, const Operation &op, const cudaStream_t &stream);
+template void PerformReduction<float>(const float *a, const float *b, float *result, const std::size_t &n, const Operation &op, const cudaStream_t &stream);
 
-template void FinalizeAverage<float>(const float *data, const std::size_t &n, const std::size_t &gpu_count, const cudaStream_t &stream);
+template void FinalizeAverage<float>(float *data, const std::size_t &n, const std::size_t &gpu_count, const cudaStream_t &stream);

@@ -17,12 +17,14 @@
 
 #include "timer.cuh"
 
-CudaTimer::CudaTimer(const std::string &label, const size_t &bytes) : label_(label), bytes_(bytes), flops_(0), elapsed_ms_(0.0f) {
+CudaTimer::CudaTimer(const std::string &label, const std::size_t &bytes) 
+    : label_(label), bytes_(bytes), flops_(0.0), elapsed_ms_(0.0f) {
     cudaEventCreate(&start_event_);
     cudaEventCreate(&stop_event_);
 }
 
-CudaTimer::CudaTimer(const std::string &label, const size_t &bytes, double &flops) : label_(label), bytes_(bytes), flops_(flops), elapsed_ms_(0.0f) {
+CudaTimer::CudaTimer(const std::string &label, const std::size_t &bytes, const double &flops) 
+    : label_(label), bytes_(bytes), flops_(flops), elapsed_ms_(0.0f) {
     cudaEventCreate(&start_event_);
     cudaEventCreate(&stop_event_);
 }
@@ -47,12 +49,12 @@ void CudaTimer::Print() const {
     std::cout << label_ << ":" << std::endl;
     std::cout << "Latency: " << elapsed_ms_ << " ms" << std::endl;
 
-    double bandwidth = static_cast<double>(bytes_) / elapsed_ms_ / 1e9;
+    const double bandwidth = static_cast<double>(bytes_) / elapsed_ms_ / 1e9;
 
     std::cout << "Bandwidth: " << bandwidth << " TB/s" << std::endl;
 
-    if (flops_ > 0) {
-        double tflops = (flops_ * 1e-12) / (elapsed_ms_ * 1e-3);
+    if (flops_ > 0.0) {
+        const double tflops = (flops_ * 1e-12) / (elapsed_ms_ * 1e-3);
         std::cout << "Performance: " << tflops << " TFLOPS" << std::endl;
     }
 }
