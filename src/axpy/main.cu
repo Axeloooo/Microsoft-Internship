@@ -1,25 +1,23 @@
-#include <iostream>
 #include <cublas_v2.h>
 #include <cuda_runtime.h>
 
-#include "checker.cuh"
-#include "timer.cuh"
-#include "data.cuh"
+#include <iostream>
+
 #include "axpy.cuh"
+#include "checker.cuh"
+#include "data.cuh"
+#include "timer.cuh"
 
 #define N 4194304
 #define BLOCK_SIZE 256
 
-void axpyCpu(float alpha, const float *x, float *y, int n)
-{
-    for (int i = 0; i < n; i++)
-    {
+void axpyCpu(float alpha, const float *x, float *y, int n) {
+    for (int i = 0; i < n; i++) {
         y[i] = alpha * x[i] + y[i];
     }
 }
 
-int main()
-{
+int main() {
     // Initialize cuBLAS handle
     cublasHandle_t cublasHandle;
     CHECK_CUBLAS(cublasCreate(&cublasHandle));
@@ -43,11 +41,11 @@ int main()
     float *h_y_cublas = new float[N];
 
     // Initialize data
-    initVector<float>(h_x, N);
-    initVector<float>(h_y_init, N);
-    initVector<float>(h_y_cpu, N);
-    initVector<float>(h_y_gpu, N);
-    initVector<float>(h_y_cublas, N);
+    InitVector<float>(h_x, N);
+    InitVector<float>(h_y_init, N);
+    InitVector<float>(h_y_cpu, N);
+    InitVector<float>(h_y_gpu, N);
+    InitVector<float>(h_y_cublas, N);
 
     float *d_x, *d_y_gpu, *d_y_cublas;
     float4 *d_x4, *d_y4;
@@ -64,7 +62,8 @@ int main()
     // Copy data from host to device
     CHECK_CUDA(cudaMemcpy(d_x, h_x, bytes, cudaMemcpyHostToDevice));
     CHECK_CUDA(cudaMemcpy(d_y_gpu, h_y_gpu, bytes, cudaMemcpyHostToDevice));
-    CHECK_CUDA(cudaMemcpy(d_y_cublas, h_y_cublas, bytes, cudaMemcpyHostToDevice));
+    CHECK_CUDA(
+        cudaMemcpy(d_y_cublas, h_y_cublas, bytes, cudaMemcpyHostToDevice));
 
     // Copy data for vectorized version
     CHECK_CUDA(cudaMemcpy(d_x4, h_x, bytes, cudaMemcpyHostToDevice));
@@ -72,15 +71,14 @@ int main()
 
     // Perform AXPY on CPU
     CudaTimer cpuTimer("AXPY CPU", totalBytes);
-    cpuTimer.start();
+    cpuTimer.Start();
     axpyCpu(alpha, h_x, h_y_cpu, N);
-    cpuTimer.stop();
-    cpuTimer.print();
+    cpuTimer.Stop();
+    cpuTimer.Print();
 
     // Perform warm up
     std::cout << "Warming up GPUs..." << std::endl;
-    for (int i = 0; i < 3; ++i)
-    {
+    for (int i = 0; i < 3; ++i) {
         naiveSaxpy<<<grid, block>>>(alpha, d_x, d_y_gpu, N);
         CHECK_CUDA(cudaGetLastError());
         CHECK_CUDA(cudaDeviceSynchronize());
@@ -89,7 +87,8 @@ int main()
         CHECK_CUDA(cudaGetLastError());
         CHECK_CUDA(cudaDeviceSynchronize());
 
-        CHECK_CUBLAS(cublasSaxpy(cublasHandle, N, &alpha, d_x, 1, d_y_cublas, 1));
+        CHECK_CUBLAS(
+            cublasSaxpy(cublasHandle, N, &alpha, d_x, 1, d_y_cublas, 1));
         CHECK_CUDA(cudaDeviceSynchronize());
     }
 
@@ -100,46 +99,47 @@ int main()
 
     // Perform Naive AXPY using CUDA kernel
     CudaTimer gpuTimer("Naive AXPY GPU Kernel", totalBytes);
-    gpuTimer.start();
+    gpuTimer.Start();
     naiveSaxpy<<<grid, block>>>(alpha, d_x, d_y_gpu, N);
     CHECK_CUDA(cudaGetLastError());
     CHECK_CUDA(cudaDeviceSynchronize());
-    gpuTimer.stop();
-    gpuTimer.print();
+    gpuTimer.Stop();
+    gpuTimer.Print();
 
     // Copy results back to host
     CHECK_CUDA(cudaMemcpy(h_y_gpu, d_y_gpu, bytes, cudaMemcpyDeviceToHost));
 
     // Verify results
-    verifyVector<float>(h_y_gpu, h_y_cpu, N);
+    VerifyVector<float>(h_y_gpu, h_y_cpu, N);
 
     // Perform Verctorized AXPY using CUDA kernel
     CudaTimer vectorizedGpuTimer("Vectorized AXPY GPU Kernel", totalBytes);
-    vectorizedGpuTimer.start();
+    vectorizedGpuTimer.Start();
     vectorizedSaxpy<<<vectorGrid, block>>>(alpha, d_x4, d_y4, vectorCount);
     CHECK_CUDA(cudaGetLastError());
     CHECK_CUDA(cudaDeviceSynchronize());
-    vectorizedGpuTimer.stop();
-    vectorizedGpuTimer.print();
+    vectorizedGpuTimer.Stop();
+    vectorizedGpuTimer.Print();
 
     // Copy results back to host for vectorized version
     CHECK_CUDA(cudaMemcpy(h_y_gpu, d_y4, bytes, cudaMemcpyDeviceToHost));
 
     // Verify results for vectorized version
-    verifyVector<float>(h_y_gpu, h_y_cpu, N);
+    VerifyVector<float>(h_y_gpu, h_y_cpu, N);
 
     // Perform AXPY using cuBLAS
     CudaTimer cublasTimer("AXPY cuBLAS", totalBytes);
-    cublasTimer.start();
+    cublasTimer.Start();
     CHECK_CUBLAS(cublasSaxpy(cublasHandle, N, &alpha, d_x, 1, d_y_cublas, 1));
-    cublasTimer.stop();
-    cublasTimer.print();
+    cublasTimer.Stop();
+    cublasTimer.Print();
 
     // Copy results back to host
-    CHECK_CUDA(cudaMemcpy(h_y_cublas, d_y_cublas, bytes, cudaMemcpyDeviceToHost));
+    CHECK_CUDA(
+        cudaMemcpy(h_y_cublas, d_y_cublas, bytes, cudaMemcpyDeviceToHost));
 
     // Verify results
-    verifyVector<float>(h_y_cublas, h_y_cpu, N);
+    VerifyVector<float>(h_y_cublas, h_y_cpu, N);
 
     // Clean up
     delete[] h_x;

@@ -1,65 +1,78 @@
-#pragma once
+/**
+ * @file timer.cuh
+ * @author your name (you@domain.com)
+ * @brief A header file for a CUDA timer class that measures the time taken by
+ * CUDA operations.
+ * @version 0.1
+ * @date 2025-06-12
+ *
+ * @copyright Copyright (c) 2025
+ *
+ */
+
+#ifndef TIMER_CUH
+#define TIMER_CUH
 
 #include <cuda_runtime.h>
+
 #include <iostream>
 #include <string>
 
-class CudaTimer
-{
-private:
-    cudaEvent_t startEvent, stopEvent;
-    std::string label;
-    size_t bytes;
-    double flops;
-    float elapsedMs;
+/**
+ * @brief A class to measure the time taken by CUDA operations.
+ *
+ */
+class CudaTimer {
+   private:
+    cudaEvent_t start_event_;
+    cudaEvent_t stop_event_;
+    std::string label_;
+    size_t bytes_;
+    double flops_;
+    float elapsed_ms_;
 
-public:
-    CudaTimer(const std::string &label, const size_t &bytes)
-        : label(label), bytes(bytes), flops(0), elapsedMs(0.0f)
-    {
-        cudaEventCreate(&startEvent);
-        cudaEventCreate(&stopEvent);
-    }
+   public:
+    /**
+     * @brief Construct a new Cuda Timer object
+     *
+     * @param label A label for the timer, useful for debugging and logging.
+     * @param bytes The number of bytes processed during the operation.
+     */
+    CudaTimer(const std::string &label, const size_t &bytes);
 
-    CudaTimer(const std::string &label, const size_t &bytes, double &flops)
-        : label(label), bytes(bytes), flops(flops), elapsedMs(0.0f)
-    {
-        cudaEventCreate(&startEvent);
-        cudaEventCreate(&stopEvent);
-    }
+    /**
+     * @brief Construct a new Cuda Timer object
+     *
+     * @param label A label for the timer, useful for debugging and logging.
+     * @param bytes The number of bytes processed during the operation.
+     * @param flops A reference to a double where the FLOPS (floating-point
+     * operations per second) will be stored.
+     */
+    CudaTimer(const std::string &label, const size_t &bytes, double &flops);
 
-    ~CudaTimer()
-    {
-        cudaEventDestroy(startEvent);
-        cudaEventDestroy(stopEvent);
-    }
+    /**
+     * @brief Destroy the Cuda Timer object
+     *
+     */
+    ~CudaTimer();
 
-    void start()
-    {
-        elapsedMs = 0.0f;
-        cudaEventRecord(startEvent);
-    }
+    /**
+     * @brief Start the timer.
+     *
+     */
+    void Start();
 
-    void stop()
-    {
-        cudaEventRecord(stopEvent);
-        cudaEventSynchronize(stopEvent);
-        cudaEventElapsedTime(&elapsedMs, startEvent, stopEvent);
-    }
+    /**
+     * @brief Stop the timer and calculate the elapsed time.
+     *
+     */
+    void Stop();
 
-    void print() const
-    {
-        std::cout << label << ":" << std::endl;
-        std::cout << "Latency: " << elapsedMs << " ms" << std::endl;
-
-        double bandwidth = static_cast<double>(bytes) / elapsedMs / 1e9;
-
-        std::cout << "Bandwidth: " << bandwidth << " TB/s" << std::endl;
-
-        if (flops > 0)
-        {
-            double tflops = (flops * 1e-12) / (elapsedMs * 1e-3);
-            std::cout << "Performance: " << tflops << " TFLOPS" << std::endl;
-        }
-    }
+    /**
+     * @brief Print the results of the timer.
+     *
+     */
+    void Print() const;
 };
+
+#endif

@@ -1,39 +1,38 @@
-#include <iostream>
-#include <cuda_runtime.h>
 #include <cublas_v2.h>
+#include <cuda_runtime.h>
+
 #include <cmath>
 #include <cstdlib>
+#include <iostream>
 
-#include "timer.cuh"
 #include "checker.cuh"
 #include "data.cuh"
 #include "dot.cuh"
+#include "timer.cuh"
 
 #define N 4194304
 #define BLOCK_SIZE 256
 
-void checkResult(const float &cpuResult, const float &gpuResult)
-{
+void checkResult(const float &cpuResult, const float &gpuResult) {
     float diff = std::fabs(cpuResult - gpuResult);
     float relError = diff / std::fabs(cpuResult);
-    if (relError > 1e-2)
-    {
+    if (relError > 1e-2) {
         std::cerr << "Results do not match!" << std::endl;
-        std::cerr << "CPU result: " << cpuResult << ", GPU result: " << gpuResult << " (relative error: " << relError << ")" << std::endl;
+        std::cerr << "CPU result: " << cpuResult
+                  << ", GPU result: " << gpuResult
+                  << " (relative error: " << relError << ")" << std::endl;
     }
-    std::cout << "Results are correct! (relative error: " << relError * 100 << "%)" << std::endl;
+    std::cout << "Results are correct! (relative error: " << relError * 100
+              << "%)" << std::endl;
 }
 
-void dotProductCpu(const float *a, const float *b, float *c, int n)
-{
+void dotProductCpu(const float *a, const float *b, float *c, int n) {
     double sum = 0.0;
-    for (int i = 0; i < n; ++i)
-        sum += static_cast<double>(a[i]) * b[i];
+    for (int i = 0; i < n; ++i) sum += static_cast<double>(a[i]) * b[i];
     *c = static_cast<float>(sum);
 }
 
-int main()
-{
+int main() {
     // Initialize cuBLAS handle
     cublasHandle_t cublasHandle;
     CHECK_CUBLAS(cublasCreate(&cublasHandle));
@@ -50,8 +49,8 @@ int main()
     float h_c_cpu, h_c_gpu, h_c_cublas = 0.0f;
 
     // Initialize data
-    initVector<float>(h_a, N);
-    initVector<float>(h_b, N);
+    InitVector<float>(h_a, N);
+    InitVector<float>(h_b, N);
 
     float *d_a, *d_b, *d_c_gpu;
 
@@ -69,22 +68,23 @@ int main()
 
     // Perform dot product on CPU
     CudaTimer cpuTimer("Dot Product CPU", totalBytes);
-    cpuTimer.start();
+    cpuTimer.Start();
     dotProductCpu(h_a, h_b, &h_c_cpu, N);
-    cpuTimer.stop();
-    cpuTimer.print();
+    cpuTimer.Stop();
+    cpuTimer.Print();
 
     // Perform warm up
     std::cout << "Warming up GPUs..." << std::endl;
-    for (int i = 0; i < 3; ++i)
-    {
+    for (int i = 0; i < 3; ++i) {
         CHECK_CUDA(cudaMemset(d_c_gpu, 0, sizeof(float)));
         naiveSdot<<<grid, block>>>(d_a, d_b, d_c_gpu, N);
         CHECK_CUDA(cudaGetLastError());
         CHECK_CUDA(cudaDeviceSynchronize());
 
         CHECK_CUDA(cudaMemset(d_c_gpu, 0, sizeof(float)));
-        optimizedSdot<BLOCK_SIZE><<<optimGrid, block, BLOCK_SIZE * sizeof(float)>>>(d_a, d_b, d_c_gpu, N);
+        optimizedSdot<BLOCK_SIZE>
+            <<<optimGrid, block, BLOCK_SIZE * sizeof(float)>>>(d_a, d_b,
+                                                               d_c_gpu, N);
         CHECK_CUDA(cudaGetLastError());
         CHECK_CUDA(cudaDeviceSynchronize());
 
@@ -94,42 +94,45 @@ int main()
 
     // Perform naive dot product using CUDA kernel
     CudaTimer naiveGpuTimer("Naive Dot Product GPU Kernel", totalBytes);
-    naiveGpuTimer.start();
+    naiveGpuTimer.Start();
     CHECK_CUDA(cudaMemset(d_c_gpu, 0, sizeof(float)));
     naiveSdot<<<grid, block>>>(d_a, d_b, d_c_gpu, N);
     CHECK_CUDA(cudaGetLastError());
     CHECK_CUDA(cudaDeviceSynchronize());
-    naiveGpuTimer.stop();
-    naiveGpuTimer.print();
+    naiveGpuTimer.Stop();
+    naiveGpuTimer.Print();
 
     // Copy result back to host
-    CHECK_CUDA(cudaMemcpy(&h_c_gpu, d_c_gpu, sizeof(float), cudaMemcpyDeviceToHost));
+    CHECK_CUDA(
+        cudaMemcpy(&h_c_gpu, d_c_gpu, sizeof(float), cudaMemcpyDeviceToHost));
 
     // Check results
     checkResult(h_c_cpu, h_c_gpu);
 
     // Perform optimized dot product using CUDA kernel
     CudaTimer optimizedGpuTimer("Optimized Dot Product GPU Kernel", totalBytes);
-    optimizedGpuTimer.start();
+    optimizedGpuTimer.Start();
     CHECK_CUDA(cudaMemset(d_c_gpu, 0, sizeof(float)));
-    optimizedSdot<BLOCK_SIZE><<<optimGrid, block, BLOCK_SIZE * sizeof(float)>>>(d_a, d_b, d_c_gpu, N);
+    optimizedSdot<BLOCK_SIZE><<<optimGrid, block, BLOCK_SIZE * sizeof(float)>>>(
+        d_a, d_b, d_c_gpu, N);
     CHECK_CUDA(cudaGetLastError());
     CHECK_CUDA(cudaDeviceSynchronize());
-    optimizedGpuTimer.stop();
-    optimizedGpuTimer.print();
+    optimizedGpuTimer.Stop();
+    optimizedGpuTimer.Print();
 
     // Copy result back to host
-    CHECK_CUDA(cudaMemcpy(&h_c_gpu, d_c_gpu, sizeof(float), cudaMemcpyDeviceToHost));
+    CHECK_CUDA(
+        cudaMemcpy(&h_c_gpu, d_c_gpu, sizeof(float), cudaMemcpyDeviceToHost));
 
     // Check results
     checkResult(h_c_cpu, h_c_gpu);
 
     // Perform dot product using cuBLAS
     CudaTimer cublasTimer("Dot Product cuBLAS", totalBytes);
-    cublasTimer.start();
+    cublasTimer.Start();
     CHECK_CUBLAS(cublasSdot(cublasHandle, N, d_a, 1, d_b, 1, &h_c_cublas));
-    cublasTimer.stop();
-    cublasTimer.print();
+    cublasTimer.Stop();
+    cublasTimer.Print();
 
     checkResult(h_c_cpu, h_c_cublas);
 

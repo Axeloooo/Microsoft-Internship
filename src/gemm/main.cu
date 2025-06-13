@@ -1,27 +1,25 @@
-#include <iostream>
-#include <cstring>
 #include <cublas_v2.h>
 #include <cuda_runtime.h>
 
-#include "gemm.cuh"
-#include "timer.cuh"
+#include <cstring>
+#include <iostream>
+
 #include "checker.cuh"
 #include "data.cuh"
+#include "gemm.cuh"
+#include "timer.cuh"
 
 #define M 1024
 #define N 1024
 #define K 1024
 #define BLOCK_DIM 16
 
-void sgemmCpu(int m, int n, int k, float alpha, const float *A, const float *B, float beta, float *C)
-{
-    for (int i = 0; i < m; ++i)
-    {
-        for (int j = 0; j < n; ++j)
-        {
+void sgemmCpu(int m, int n, int k, float alpha, const float *A, const float *B,
+              float beta, float *C) {
+    for (int i = 0; i < m; ++i) {
+        for (int j = 0; j < n; ++j) {
             float tmp = 0.0f;
-            for (int p = 0; p < k; ++p)
-            {
+            for (int p = 0; p < k; ++p) {
                 tmp += A[i * k + p] * B[p * n + j];
             }
             C[i * n + j] = alpha * tmp + beta * C[i * n + j];
@@ -29,8 +27,7 @@ void sgemmCpu(int m, int n, int k, float alpha, const float *A, const float *B, 
     }
 }
 
-int main()
-{
+int main() {
     // Initialize cuBLAS
     cublasHandle_t cublasHandle;
     CHECK_CUBLAS(cublasCreate(&cublasHandle));
@@ -57,9 +54,9 @@ int main()
     float *h_C_cublas = new float[M * N];
 
     // Initialize matrices
-    initializeMatrix<float>(h_A, M, K);
-    initializeMatrix<float>(h_B, K, N);
-    initializeMatrix<float>(h_C, M, N);
+    InitializeMatrix<float>(h_A, M, K);
+    InitializeMatrix<float>(h_B, K, N);
+    InitializeMatrix<float>(h_C, M, N);
 
     // Copy C matrix for CPU and cuBLAS computations
     std::memcpy(h_C_cpu, h_C, bytesC);
@@ -83,24 +80,26 @@ int main()
 
     // Perform CPU computation
     CudaTimer cpuTimer("SGEMM CPU", totalBytes, totalFlops);
-    cpuTimer.start();
+    cpuTimer.Start();
     sgemmCpu(M, N, K, alpha, h_A, h_B, beta, h_C_cpu);
-    cpuTimer.stop();
-    cpuTimer.print();
+    cpuTimer.Stop();
+    cpuTimer.Print();
 
     // Warm up GPU
     std::cout << "Warming up GPUs..." << std::endl;
-    for (int i = 0; i < 3; ++i)
-    {
+    for (int i = 0; i < 3; ++i) {
         naiveSgemm<<<gridDim, blockDim>>>(M, N, K, alpha, d_A, d_B, beta, d_C);
         CHECK_CUDA(cudaGetLastError());
         CHECK_CUDA(cudaDeviceSynchronize());
 
-        coalescingSgemm<BLOCK_DIM><<<gridDim, blockDim>>>(M, N, K, alpha, d_A, d_B, beta, d_C);
+        coalescingSgemm<BLOCK_DIM>
+            <<<gridDim, blockDim>>>(M, N, K, alpha, d_A, d_B, beta, d_C);
         CHECK_CUDA(cudaGetLastError());
         CHECK_CUDA(cudaDeviceSynchronize());
 
-        CHECK_CUBLAS(cublasSgemm(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, N, M, K, &alpha, d_B, N, d_A, K, &beta, d_C_cublas, N));
+        CHECK_CUBLAS(cublasSgemm(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, N, M,
+                                 K, &alpha, d_B, N, d_A, K, &beta, d_C_cublas,
+                                 N));
         CHECK_CUDA(cudaDeviceSynchronize());
     }
 
@@ -110,44 +109,47 @@ int main()
 
     // Perform naive SGEMM
     CudaTimer naiveTimer("Naive SGEMM GPU", totalBytes, totalFlops);
-    naiveTimer.start();
+    naiveTimer.Start();
     naiveSgemm<<<gridDim, blockDim>>>(M, N, K, alpha, d_A, d_B, beta, d_C);
     CHECK_CUDA(cudaGetLastError());
     CHECK_CUDA(cudaDeviceSynchronize());
-    naiveTimer.stop();
-    naiveTimer.print();
+    naiveTimer.Stop();
+    naiveTimer.Print();
 
     // Copy results back and verify
     CHECK_CUDA(cudaMemcpy(h_C, d_C, bytesC, cudaMemcpyDeviceToHost));
-    verifyMatrix<float>(h_C_cpu, h_C, M, N);
+    VerifyMatrix<float>(h_C_cpu, h_C, M, N);
 
     // Reset output matrix CHECK THIS
     CHECK_CUDA(cudaMemcpy(d_C, h_C, bytesC, cudaMemcpyHostToDevice));
 
     // Perform coalescing SGEMM
     CudaTimer coalescingTimer("Coalescing SGEMM GPU", totalBytes, totalFlops);
-    coalescingTimer.start();
-    coalescingSgemm<BLOCK_DIM><<<gridDim, blockDim>>>(M, N, K, alpha, d_A, d_B, beta, d_C);
+    coalescingTimer.Start();
+    coalescingSgemm<BLOCK_DIM>
+        <<<gridDim, blockDim>>>(M, N, K, alpha, d_A, d_B, beta, d_C);
     CHECK_CUDA(cudaGetLastError());
     CHECK_CUDA(cudaDeviceSynchronize());
-    coalescingTimer.stop();
-    coalescingTimer.print();
+    coalescingTimer.Stop();
+    coalescingTimer.Print();
 
     // Copy results back and verify
     CHECK_CUDA(cudaMemcpy(h_C, d_C, bytesC, cudaMemcpyDeviceToHost));
-    verifyMatrix<float>(h_C_cpu, h_C, M, N);
+    VerifyMatrix<float>(h_C_cpu, h_C, M, N);
 
     // Perform cuBLAS SGEMM
     CudaTimer cublasTimer("cuBLAS SGEMM", totalBytes, totalFlops);
-    cublasTimer.start();
-    CHECK_CUBLAS(cublasSgemm(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, N, M, K, &alpha, d_B, N, d_A, K, &beta, d_C_cublas, N));
+    cublasTimer.Start();
+    CHECK_CUBLAS(cublasSgemm(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, N, M, K,
+                             &alpha, d_B, N, d_A, K, &beta, d_C_cublas, N));
     CHECK_CUDA(cudaDeviceSynchronize());
-    cublasTimer.stop();
-    cublasTimer.print();
+    cublasTimer.Stop();
+    cublasTimer.Print();
 
     // Copy results back and verify
-    CHECK_CUDA(cudaMemcpy(h_C_cublas, d_C_cublas, bytesC, cudaMemcpyDeviceToHost));
-    verifyMatrix<float>(h_C_cpu, h_C_cublas, M, N);
+    CHECK_CUDA(
+        cudaMemcpy(h_C_cublas, d_C_cublas, bytesC, cudaMemcpyDeviceToHost));
+    VerifyMatrix<float>(h_C_cpu, h_C_cublas, M, N);
 
     // Clean up
     delete[] h_A;
