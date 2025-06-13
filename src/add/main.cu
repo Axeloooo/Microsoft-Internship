@@ -1,25 +1,23 @@
-#include <iostream>
-#include <cmath>
 #include <cuda_runtime.h>
 
-#include "timer.cuh"
+#include <cmath>
+#include <iostream>
+
+#include "add.cuh"
 #include "checker.cuh"
 #include "data.cuh"
-#include "add.cuh"
+#include "timer.cuh"
 
 #define N 4194304
 #define BLOCK_SIZE 256
 
-void vectorAddCpu(const float *a, const float *b, float *c, int n)
-{
-    for (int i = 0; i < n; i++)
-    {
+void vectorAddCpu(const float *a, const float *b, float *c, const int n) {
+    for (int i = 0; i < n; i++) {
         c[i] = a[i] + b[i];
     }
 }
 
-int main()
-{
+int main() {
     dim3 block(BLOCK_SIZE);
     dim3 grid((N + BLOCK_SIZE - 1) / BLOCK_SIZE);
 
@@ -32,8 +30,8 @@ int main()
     float *h_c_gpu = new float[N];
 
     // Initialize data
-    initVector<float>(h_a, N);
-    initVector<float>(h_b, N);
+    InitVector<float>(h_a, N);
+    InitVector<float>(h_b, N);
 
     float *d_a, *d_b, *d_c_gpu;
 
@@ -48,15 +46,14 @@ int main()
 
     // Perform Vector Addition on CPU
     CudaTimer cpuTimer("Vector Addition CPU", totalBytes);
-    cpuTimer.start();
+    cpuTimer.Start();
     vectorAddCpu(h_a, h_b, h_c_cpu, N);
-    cpuTimer.stop();
-    cpuTimer.print();
+    cpuTimer.Stop();
+    cpuTimer.Print();
 
     // Perform warm up
     std::cout << "Warming up GPUs..." << std::endl;
-    for (int i = 0; i < 3; i++)
-    {
+    for (int i = 0; i < 3; i++) {
         add<<<grid, block>>>(d_a, d_b, d_c_gpu, N);
         CHECK_CUDA(cudaGetLastError());
         CHECK_CUDA(cudaDeviceSynchronize());
@@ -64,18 +61,18 @@ int main()
 
     // Perform GPU computation
     CudaTimer gpuTimer("Vector Addition GPU Kernel", totalBytes);
-    gpuTimer.start();
+    gpuTimer.Start();
     add<<<grid, block>>>(d_a, d_b, d_c_gpu, N);
     CHECK_CUDA(cudaGetLastError());
     CHECK_CUDA(cudaDeviceSynchronize());
-    gpuTimer.stop();
-    gpuTimer.print();
+    gpuTimer.Stop();
+    gpuTimer.Print();
 
     // Copy results back to host
     CHECK_CUDA(cudaMemcpy(h_c_gpu, d_c_gpu, bytes, cudaMemcpyDeviceToHost));
 
     // Verify results
-    verifyVector<float>(h_c_cpu, h_c_gpu, N);
+    VerifyVector<float>(h_c_cpu, h_c_gpu, N);
 
     // Clean up
     delete[] h_a;

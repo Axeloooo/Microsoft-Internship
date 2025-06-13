@@ -1,146 +1,111 @@
+/**
+ * @file allgather.cu
+ * @author Axel Omar Sanchez Peralta (t-axels@microsoft.com)
+ * @brief Example of AllGather operation using MCCL
+ * @version 0.1
+ * @date 2025-06-13
+ *
+ * @copyright Copyright (c) 2025
+ *
+ */
+
 #include <cuda_runtime.h>
+
+#include <cmath>
 #include <iostream>
+#include <vector>
 
 #include "checker.cuh"
+#include "collectives.cuh"
 #include "data.cuh"
 
-#define N 4194304
-#define BYTES (N * sizeof(float))
+constexpr std::size_t kN = 4194304;
+constexpr std::size_t kBytes = (kN * sizeof(float));
 
-int main(int argc, char **argv)
-{
-    int NUM_GPUS = 0;
-    CHECK_CUDA(cudaGetDeviceCount(&NUM_GPUS));
-    std::cout << "Number of GPUs available: " << NUM_GPUS << std::endl;
+/**
+ * @brief Main function to demonstrate AllGather operation using MCCL
+ *
+ * @param argc
+ * @param argv
+ * @return int
+ */
+int main(int argc, char **argv) {
+    int num_gpus = 0;
+    CHECK_CUDA(cudaGetDeviceCount(&num_gpus));
+    std::cout << "Number of GPUs available: " << num_gpus << std::endl;
 
-    int TOTAL_BYTES = BYTES * NUM_GPUS;
+    if (num_gpus == 0) {
+        std::cerr << "No GPUs available!" << std::endl;
+        return 1;
+    }
+
+    // Initialize MCCL library
+    MCCL<float> mccl(num_gpus);
 
     // Host data for each GPU
-    float **h_a = new float *[NUM_GPUS];
-    for (uint i = 0; i < NUM_GPUS; i++)
-    {
-        h_a[i] = new float[N];
-        initVector<float>(h_a[i], N);
+    std::vector<float *> h_in(num_gpus);
+    for (int i = 0; i < num_gpus; i++) {
+        h_in[i] = new float[kN];
+        InitVector<float>(h_in[i], kN);
     }
 
-    // Device arrays
-    float **d_a = new float *[NUM_GPUS];
-    float **d_b = new float *[NUM_GPUS];
-    int *devices = new int[NUM_GPUS];
-    cudaStream_t *streams = new cudaStream_t[NUM_GPUS];
+    // Allocate buffers for MCCL-style API
+    std::vector<float *> sendbuff(num_gpus);
+    std::vector<float *> recvbuff(num_gpus);
 
-    // Initialize devices array with sequential device IDs
-    for (uint i = 0; i < NUM_GPUS; i++)
-    {
-        devices[i] = i;
+    // Allocate GPU memory
+    const int total_bytes = kBytes * num_gpus;
+    for (int i = 0; i < num_gpus; i++) {
+        CHECK_CUDA(cudaSetDevice(i));
+        CHECK_CUDA(cudaMalloc(&sendbuff[i], kBytes));       // Input: N elements per GPU
+        CHECK_CUDA(cudaMalloc(&recvbuff[i], total_bytes));  // Output: N*NUM_GPUS elements per GPU
     }
 
-    // Allocate memory on all devices
-    for (uint i = 0; i < NUM_GPUS; i++)
-    {
-        CHECK_CUDA(cudaSetDevice(devices[i]));
-        CHECK_CUDA(cudaMalloc(&d_a[i], BYTES));
-        CHECK_CUDA(cudaMalloc(&d_b[i], TOTAL_BYTES));
-        CHECK_CUDA(cudaStreamCreate(&streams[i]));
+    // Initialize data on each device
+    for (int i = 0; i < num_gpus; i++) {
+        CHECK_CUDA(cudaSetDevice(i));
+        CHECK_CUDA(cudaMemcpy(sendbuff[i], h_in[i], kBytes, cudaMemcpyHostToDevice));
     }
 
-    // Enable peer-to-peer access
-    for (uint i = 0; i < NUM_GPUS; i++)
-    {
-        for (uint j = 0; j < NUM_GPUS; j++)
-        {
-            if (i != j)
-            {
-                CHECK_CUDA(cudaSetDevice(devices[i]));
-                int can_access;
-                CHECK_CUDA(cudaDeviceCanAccessPeer(&can_access, devices[i], devices[j]));
-                if (can_access)
-                {
-                    CHECK_CUDA(cudaDeviceEnablePeerAccess(devices[j], 0));
-                }
-            }
-        }
-    }
-
-    // Initialize input data on each device
-    for (uint i = 0; i < NUM_GPUS; i++)
-    {
-        CHECK_CUDA(cudaSetDevice(devices[i]));
-        CHECK_CUDA(cudaMemcpy(d_a[i], h_a[i], BYTES, cudaMemcpyHostToDevice));
-    }
-
-    // Allgather: Each GPU copies its data to all other GPUs' output buffers
-    for (uint src = 0; src < NUM_GPUS; src++)
-    {
-        for (uint dst = 0; dst < NUM_GPUS; dst++)
-        {
-            CHECK_CUDA(cudaSetDevice(devices[dst]));
-            size_t offset = src * N;
-
-            if (src == dst)
-            {
-                // Local copy
-                CHECK_CUDA(cudaMemcpyAsync(d_b[dst] + offset, d_a[src], BYTES, cudaMemcpyDeviceToDevice, streams[dst]));
-            }
-            else
-            {
-                // Peer-to-peer copy
-                CHECK_CUDA(cudaMemcpyPeerAsync(d_b[dst] + offset, devices[dst], d_a[src], devices[src], BYTES, streams[dst]));
-            }
-        }
-    }
-
-    // Synchronize all streams
-    for (int i = 0; i < NUM_GPUS; i++)
-    {
-        CHECK_CUDA(cudaSetDevice(devices[i]));
-        CHECK_CUDA(cudaStreamSynchronize(streams[i]));
-    }
+    // Perform allgather operation using MCCL
+    std::cout << "Performing AllGather operation..." << std::endl;
+    mccl.AllGather(sendbuff, recvbuff, kN);
 
     // Verify results
-    std::cout << "Allgather completed. Verifying results...\n";
-    for (int i = 0; i < NUM_GPUS; i++)
-    {
-        CHECK_CUDA(cudaSetDevice(devices[i]));
-        float *verify_data = new float[N * NUM_GPUS];
-        CHECK_CUDA(cudaMemcpy(verify_data, d_b[i], TOTAL_BYTES, cudaMemcpyDeviceToHost));
+    std::cout << "AllGather completed. Verifying results..." << std::endl;
+    bool all_success = true;
+    for (int i = 0; i < num_gpus; i++) {
+        CHECK_CUDA(cudaSetDevice(i));
+        float *verify_data = new float[kN * num_gpus];
+        CHECK_CUDA(cudaMemcpy(verify_data, recvbuff[i], total_bytes, cudaMemcpyDeviceToHost));
 
         bool success = true;
-        for (int src = 0; src < NUM_GPUS; src++)
-        {
-            for (int j = 0; j < N; j++)
-            {
-                int idx = src * N + j;
-                float expected = h_a[src][j];
-                if (verify_data[idx] != expected)
-                {
+        for (int src = 0; src < num_gpus; src++) {
+            for (int j = 0; j < kN; j++) {
+                const int idx = src * kN + j;
+                const float expected = h_in[src][j];
+                if (std::fabs(verify_data[idx] - expected) > 1e-5f) {
                     success = false;
-                    std::cout << "Mismatch at GPU " << i << ", index " << idx
-                              << ": expected " << expected << ", got " << verify_data[idx] << std::endl;
+                    std::cout << "Mismatch at GPU " << i << ", index " << idx << ": expected " << expected << ", got " << verify_data[idx] << std::endl;
                     break;
                 }
             }
-            if (!success)
-                break;
+            if (!success) break;
         }
-        std::cout << "Device " << devices[i] << ": " << (success ? "PASS" : "FAIL") << std::endl;
+        std::cout << "GPU " << i << ": " << (success ? "PASS" : "FAIL") << std::endl;
+        if (!success) all_success = false;
         delete[] verify_data;
     }
 
+    std::cout << "Overall result: " << (all_success ? "PASS" : "FAIL") << std::endl;
+
     // Cleanup
-    for (int i = 0; i < NUM_GPUS; i++)
-    {
-        CHECK_CUDA(cudaSetDevice(devices[i]));
-        CHECK_CUDA(cudaFree(d_a[i]));
-        CHECK_CUDA(cudaFree(d_b[i]));
-        CHECK_CUDA(cudaStreamDestroy(streams[i]));
-        delete[] h_a[i];
+    for (int i = 0; i < num_gpus; i++) {
+        CHECK_CUDA(cudaSetDevice(i));
+        CHECK_CUDA(cudaFree(sendbuff[i]));
+        CHECK_CUDA(cudaFree(recvbuff[i]));
+        delete[] h_in[i];
     }
-    delete[] devices;
-    delete[] d_a;
-    delete[] d_b;
-    delete[] streams;
-    delete[] h_a;
 
     return 0;
 }

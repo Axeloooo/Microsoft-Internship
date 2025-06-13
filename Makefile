@@ -22,11 +22,16 @@ AXPY_SRC    := $(SRC_DIR)/axpy/main.cu
 DOT_SRC     := $(SRC_DIR)/dot/main.cu
 ADD_SRC     := $(SRC_DIR)/add/main.cu
 GEMM_SRC    := $(SRC_DIR)/gemm/main.cu
+COLLECTIVES_SRC := $(SRC_DIR)/collectives/collectives.cu
 BROADCAST_SRC := $(SRC_DIR)/collectives/broadcast.cu
 ALLGATHER_SRC := $(SRC_DIR)/collectives/allgather.cu
 ALLREDUCE_SRC := $(SRC_DIR)/collectives/allreduce.cu
 REDUCE_COLLECTIVE_SRC := $(SRC_DIR)/collectives/reduce.cu
 REDUCESCATTER_SRC := $(SRC_DIR)/collectives/reducescatter.cu
+
+# Utility source files
+TIMER_SRC   := $(SRC_DIR)/utils/timer.cu
+DATA_SRC    := $(SRC_DIR)/utils/data.cu
 
 # Output binaries
 REDUCE_BIN  := $(BUILD_DIR)/reduction
@@ -111,55 +116,55 @@ reducescatter: $(REDUCESCATTER_BIN)
 # we do `@mkdir -p $(BUILD_DIR)` inline in each rule. This removes
 # any ambiguity between a phony “build” target and a real “build” folder.
 # ------------------------------------------------------------------------
-$(REDUCE_BIN): $(REDUCE_SRC)
+$(REDUCE_BIN): $(REDUCE_SRC) $(TIMER_SRC) $(DATA_SRC)
 	@echo "Building reduction module…"
 	@mkdir -p $(BUILD_DIR)
-	$(NVCC) $(NVCCFLAGS) -o $@ $<
+	$(NVCC) $(NVCCFLAGS) -o $@ $^
 
-$(AXPY_BIN): $(AXPY_SRC)
+$(AXPY_BIN): $(AXPY_SRC) $(TIMER_SRC) $(DATA_SRC)
 	@echo "Building axpy module…"
 	@mkdir -p $(BUILD_DIR)
-	$(NVCC) $(NVCCFLAGS) $(CUBLAS_LIBS) -o $@ $<
+	$(NVCC) $(NVCCFLAGS) $(CUBLAS_LIBS) -o $@ $^
 
-$(DOT_BIN): $(DOT_SRC)
+$(DOT_BIN): $(DOT_SRC) $(TIMER_SRC) $(DATA_SRC)
 	@echo "Building dot product module…"
 	@mkdir -p $(BUILD_DIR)
-	$(NVCC) $(NVCCFLAGS) $(CUBLAS_LIBS) -o $@ $<
+	$(NVCC) $(NVCCFLAGS) $(CUBLAS_LIBS) -o $@ $^
 
-$(ADD_BIN): $(ADD_SRC)
+$(ADD_BIN): $(ADD_SRC) $(TIMER_SRC) $(DATA_SRC)
 	@echo "Building add module…"
 	@mkdir -p $(BUILD_DIR)
-	$(NVCC) $(NVCCFLAGS) -o $@ $<
+	$(NVCC) $(NVCCFLAGS) -o $@ $^
 
-$(GEMM_BIN): $(GEMM_SRC)
+$(GEMM_BIN): $(GEMM_SRC) $(TIMER_SRC) $(DATA_SRC)
 	@echo "Building GEMM module…"
 	@mkdir -p $(BUILD_DIR)
-	$(NVCC) $(NVCCFLAGS) $(CUBLAS_LIBS) -o $@ $<
+	$(NVCC) $(NVCCFLAGS) $(CUBLAS_LIBS) -o $@ $^
 
-$(BROADCAST_BIN): $(BROADCAST_SRC)
+$(BROADCAST_BIN): $(BROADCAST_SRC) $(COLLECTIVES_SRC) $(TIMER_SRC) $(DATA_SRC)
 	@echo "Building broadcast module…"
 	@mkdir -p $(BUILD_DIR)
-	$(NVCC) $(NVCCFLAGS) -o $@ $<
+	$(NVCC) $(NVCCFLAGS) -o $@ $^
 
-$(ALLGATHER_BIN): $(ALLGATHER_SRC)
+$(ALLGATHER_BIN): $(ALLGATHER_SRC) $(COLLECTIVES_SRC) $(TIMER_SRC) $(DATA_SRC)
 	@echo "Building allgather module…"
 	@mkdir -p $(BUILD_DIR)
-	$(NVCC) $(NVCCFLAGS) -o $@ $<
+	$(NVCC) $(NVCCFLAGS) -o $@ $^
 
-$(ALLREDUCE_BIN): $(ALLREDUCE_SRC)
+$(ALLREDUCE_BIN): $(ALLREDUCE_SRC) $(COLLECTIVES_SRC) $(TIMER_SRC) $(DATA_SRC)
 	@echo "Building allreduce module…"
 	@mkdir -p $(BUILD_DIR)
-	$(NVCC) $(NVCCFLAGS) -o $@ $<
+	$(NVCC) $(NVCCFLAGS) -o $@ $^
 
-$(REDUCE_COLLECTIVE_BIN): $(REDUCE_COLLECTIVE_SRC)
+$(REDUCE_COLLECTIVE_BIN): $(REDUCE_COLLECTIVE_SRC) $(COLLECTIVES_SRC) $(TIMER_SRC) $(DATA_SRC)
 	@echo "Building reduction collectives module…"
 	@mkdir -p $(BUILD_DIR)
-	$(NVCC) $(NVCCFLAGS) -o $@ $<
+	$(NVCC) $(NVCCFLAGS) -o $@ $^
 
-$(REDUCESCATTER_BIN): $(REDUCESCATTER_SRC)
+$(REDUCESCATTER_BIN): $(REDUCESCATTER_SRC) $(COLLECTIVES_SRC) $(TIMER_SRC) $(DATA_SRC)
 	@echo "Building reducescatter module…"
 	@mkdir -p $(BUILD_DIR)
-	$(NVCC) $(NVCCFLAGS) -o $@ $<
+	$(NVCC) $(NVCCFLAGS) -o $@ $^
 
 # ------------------------------------------------------------------------
 # 4) Clean everything
