@@ -15,8 +15,8 @@
 #include <vector>
 
 #include "checker.cuh"
-#include "collectives.cuh"
 #include "data.cuh"
+#include "mccl.cuh"
 
 constexpr std::size_t kN = 4194304;
 constexpr std::size_t kBytes = (kN * sizeof(float));

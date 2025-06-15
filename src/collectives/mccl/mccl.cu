@@ -18,7 +18,7 @@
 #include <vector>
 
 #include "checker.cuh"
-#include "collectives.cuh"
+#include "mccl.cuh"
 
 // CUDA kernel definitions for reduction operations
 constexpr std::size_t kBlockSize = 256;

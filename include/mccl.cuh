@@ -1,5 +1,5 @@
 /**
- * @file collectives.cuh
+ * @file mccl.cuh
  * @author Axel Omar Sanchez Peralta (t-axels@microsoft.com)
  * @brief Collective communication operations for multi-GPU environments
  * @version 0.1
