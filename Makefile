@@ -33,7 +33,7 @@ MCCL_REDUCE_SRC := $(SRC_DIR)/collectives/mccl/reduce.cu
 MCCL_REDUCESCATTER_SRC := $(SRC_DIR)/collectives/mccl/reducescatter.cu
 
 # MPI Collective source files
-MPI_BROADCAST_SRC := $(SRC_DIR)/collectives/mpi/broadcast.cpp
+MPI_BROADCAST_SRC := $(SRC_DIR)/collectives/mpi/broadcast.cu
 MPI_ALLGATHER_SRC := $(SRC_DIR)/collectives/mpi/allgather.cu
 MPI_ALLREDUCE_SRC := $(SRC_DIR)/collectives/mpi/allreduce.cu
 MPI_REDUCE_SRC := $(SRC_DIR)/collectives/mpi/reduce.cu
@@ -222,52 +222,52 @@ $(GEMM_BIN): $(GEMM_SRC) $(TIMER_SRC) $(DATA_SRC)
 $(MCCL_BROADCAST_BIN): $(MCCL_BROADCAST_SRC) $(MCCL_SRC) $(DATA_SRC)
 	@echo "Building MCCL broadcast module…"
 	@mkdir -p $(BUILD_DIR)/collectives/mccl
-	$(NVCC) $(NVCCFLAGS) -o $@ $^
+	$(NVCC) $(NVCCFLAGS) $(MPI_INCLUDE) -o $@ $^ $(MPI_LIB)
 
 $(MCCL_ALLGATHER_BIN): $(MCCL_ALLGATHER_SRC) $(MCCL_SRC) $(DATA_SRC)
 	@echo "Building MCCL allgather module…"
 	@mkdir -p $(BUILD_DIR)/collectives/mccl
-	$(NVCC) $(NVCCFLAGS) -o $@ $^
+	$(NVCC) $(NVCCFLAGS) $(MPI_INCLUDE) -o $@ $^ $(MPI_LIB)
 
 $(MCCL_ALLREDUCE_BIN): $(MCCL_ALLREDUCE_SRC) $(MCCL_SRC) $(DATA_SRC)
 	@echo "Building MCCL allreduce module…"
 	@mkdir -p $(BUILD_DIR)/collectives/mccl
-	$(NVCC) $(NVCCFLAGS) -o $@ $^
+	$(NVCC) $(NVCCFLAGS) $(MPI_INCLUDE) -o $@ $^ $(MPI_LIB)
 
 $(MCCL_REDUCE_BIN): $(MCCL_REDUCE_SRC) $(MCCL_SRC) $(DATA_SRC)
 	@echo "Building MCCL reduction collective module…"
 	@mkdir -p $(BUILD_DIR)/collectives/mccl
-	$(NVCC) $(NVCCFLAGS) -o $@ $^
+	$(NVCC) $(NVCCFLAGS) $(MPI_INCLUDE) -o $@ $^ $(MPI_LIB)
 
 $(MCCL_REDUCESCATTER_BIN): $(MCCL_REDUCESCATTER_SRC) $(MCCL_SRC) $(DATA_SRC)
 	@echo "Building MCCL reducescatter module…"
 	@mkdir -p $(BUILD_DIR)/collectives/mccl
-	$(NVCC) $(NVCCFLAGS) -o $@ $^
+	$(NVCC) $(NVCCFLAGS) $(MPI_INCLUDE) -o $@ $^ $(MPI_LIB)
 
 # ------------------------------------------------------------------------
 # Rules to compile MPI collective modules
 # ------------------------------------------------------------------------
-$(MPI_BROADCAST_BIN): $(MPI_BROADCAST_SRC)
+$(MPI_BROADCAST_BIN): $(MPI_BROADCAST_SRC) $(DATA_SRC)
 	@echo "Building MPI broadcast module…"
 	@mkdir -p $(BUILD_DIR)/collectives/mpi
 	$(NVCC) $(NVCCFLAGS) $(MPI_INCLUDE) -o $@ $^ $(MPI_LIB)
 
-$(MPI_ALLGATHER_BIN): $(MPI_ALLGATHER_SRC)
+$(MPI_ALLGATHER_BIN): $(MPI_ALLGATHER_SRC) $(DATA_SRC)
 	@echo "Building MPI allgather module…"
 	@mkdir -p $(BUILD_DIR)/collectives/mpi
 	$(NVCC) $(NVCCFLAGS) $(MPI_INCLUDE) -o $@ $^ $(MPI_LIB)
 
-$(MPI_ALLREDUCE_BIN): $(MPI_ALLREDUCE_SRC)
+$(MPI_ALLREDUCE_BIN): $(MPI_ALLREDUCE_SRC) $(DATA_SRC)
 	@echo "Building MPI allreduce module…"
 	@mkdir -p $(BUILD_DIR)/collectives/mpi
 	$(NVCC) $(NVCCFLAGS) $(MPI_INCLUDE) -o $@ $^ $(MPI_LIB)
 
-$(MPI_REDUCE_BIN): $(MPI_REDUCE_SRC)
+$(MPI_REDUCE_BIN): $(MPI_REDUCE_SRC) $(DATA_SRC)
 	@echo "Building MPI reduce module…"
 	@mkdir -p $(BUILD_DIR)/collectives/mpi
 	$(NVCC) $(NVCCFLAGS) $(MPI_INCLUDE) -o $@ $^ $(MPI_LIB)
 
-$(MPI_REDUCESCATTER_BIN): $(MPI_REDUCESCATTER_SRC)
+$(MPI_REDUCESCATTER_BIN): $(MPI_REDUCESCATTER_SRC) $(DATA_SRC)
 	@echo "Building MPI reducescatter module…"
 	@mkdir -p $(BUILD_DIR)/collectives/mpi
 	$(NVCC) $(NVCCFLAGS) $(MPI_INCLUDE) -o $@ $^ $(MPI_LIB)

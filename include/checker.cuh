@@ -22,7 +22,7 @@
  * @brief Macro to check CUDA function calls for errors.
  *
  */
-#define CHECK_CUDA(call)                                                                                                  \
+#define CUDA_CHECK(call)                                                                                                  \
     {                                                                                                                     \
         cudaError_t err = (call);                                                                                         \
         if (err != cudaSuccess) {                                                                                         \

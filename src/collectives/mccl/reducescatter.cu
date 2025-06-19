@@ -10,8 +10,10 @@
  */
 
 #include <cuda_runtime.h>
+#include <mpi.h>
 
 #include <cmath>
+#include <cstddef>
 #include <iostream>
 #include <vector>
 
@@ -20,109 +22,70 @@
 #include "mccl.cuh"
 
 constexpr std::size_t kN = 4194304;
-constexpr std::size_t kBytes = (kN * sizeof(float));
 
 /**
  * @brief Main function to demonstrate ReduceScatter operation using MCCL library
  *
- * @param argc
- * @param argv
+ * @param argc argument count
+ * @param argv argument vector
  * @return int
  */
 int main(int argc, char **argv) {
-    int num_gpus = 0;
-    CHECK_CUDA(cudaGetDeviceCount(&num_gpus));
-    std::cout << "Number of GPUs available: " << num_gpus << std::endl;
+    MPI_Init(&argc, &argv);
 
-    if (num_gpus == 0) {
-        std::cerr << "No GPUs available!" << std::endl;
-        return 1;
-    }
+    int world_size;
+    MPI_Comm_size(MPI_COMM_WORLD, &world_size);
 
-    // Initialize MCCL library
-    MCCL<float> mccl(num_gpus);
+    int world_rank;
+    MPI_Comm_rank(MPI_COMM_WORLD, &world_rank);
 
-    // Calculate chunk size per GPU
-    const int chunk_size = kN / num_gpus;
-    const int chunk_bytes = chunk_size * sizeof(float);
-    const int total_bytes = kBytes * num_gpus;
+    CUDA_CHECK(cudaSetDevice(world_rank));
 
-    // Host data for each GPU
-    std::vector<float *> h_in(num_gpus);
-    std::vector<float *> h_expected(num_gpus);
-
-    // Initialize input data and expected results
-    for (int i = 0; i < num_gpus; i++) {
-        h_in[i] = new float[kN * num_gpus];
-        h_expected[i] = new float[chunk_size];
-
-        // Initialize input data
-        InitVector<float>(h_in[i], kN * num_gpus);
-    }
-
-    for (int i = 0; i < num_gpus; i++) {
-        // Calculate expected results for ReduceScatter (SUM operation)
-        for (int j = 0; j < chunk_size; j++) {
-            h_expected[i][j] = 0.0f;
-            for (int k = 0; k < num_gpus; k++) {
-                h_expected[i][j] += h_in[k][i * chunk_size + j];
-            }
+    for (int i = 0; i < world_size; ++i) {
+        if (i != world_rank) {
+            CUDA_CHECK(cudaDeviceEnablePeerAccess(i, 0));
         }
     }
 
-    // Allocate buffers for MCCL-style API
-    std::vector<float *> sendbuff(num_gpus);
-    std::vector<float *> recvbuff(num_gpus);
+    const std::size_t sendcount = kN;
+    const int recvcount = kN / world_size;
+    const std::size_t sendbytes = sendcount * sizeof(float);
+    const std::size_t recvbytes = recvcount * sizeof(float);
 
-    // Allocate GPU memory
-    for (int i = 0; i < num_gpus; i++) {
-        CHECK_CUDA(cudaSetDevice(i));
-        CHECK_CUDA(cudaMalloc(&sendbuff[i], total_bytes));
-        CHECK_CUDA(cudaMalloc(&recvbuff[i], chunk_bytes));
-    }
+    float *d_sendbuff = nullptr;
+    float *d_recvbuff = nullptr;
+    CUDA_CHECK(cudaMalloc(&d_sendbuff, sendbytes));
+    CUDA_CHECK(cudaMalloc(&d_recvbuff, recvbytes));
 
-    // Initialize data on each device
-    for (int i = 0; i < num_gpus; i++) {
-        CHECK_CUDA(cudaSetDevice(i));
-        CHECK_CUDA(cudaMemcpy(sendbuff[i], h_in[i], total_bytes, cudaMemcpyHostToDevice));
-    }
+    float *h_in = new float[sendcount];
+    InitVector<float>(h_in, sendcount);
+    CUDA_CHECK(cudaMemcpy(d_sendbuff, h_in, sendbytes, cudaMemcpyHostToDevice));
 
-    // Perform reduce-scatter operation using MCCL (SUM operation)
-    std::cout << "Performing ReduceScatter operation (SUM)..." << std::endl;
+    MCCL<float> mccl(world_rank, world_size);
     const Operation op = SUM;
-    mccl.ReduceScatter(sendbuff, recvbuff, chunk_size, op);
+    mccl.ReduceScatter(d_sendbuff, d_recvbuff, recvcount, op);
 
-    // Verify results
-    std::cout << "ReduceScatter completed. Verifying results..." << std::endl;
-    bool all_success = true;
-    for (int gpu = 0; gpu < num_gpus; gpu++) {
-        CHECK_CUDA(cudaSetDevice(gpu));
-        float *verify_data = new float[chunk_size];
-        CHECK_CUDA(cudaMemcpy(verify_data, recvbuff[gpu], chunk_bytes, cudaMemcpyDeviceToHost));
+    float *h_result = new float[recvcount];
+    CUDA_CHECK(cudaMemcpy(h_result, d_recvbuff, recvbytes, cudaMemcpyDeviceToHost));
 
-        bool success = true;
-        for (int j = 0; j < chunk_size; j++) {
-            if (std::fabs(verify_data[j] - h_expected[gpu][j]) > 1e-5f) {
-                success = false;
-                std::cout << "Mismatch at GPU " << gpu << ", index " << j << ": expected " << h_expected[gpu][j] << ", got " << verify_data[j] << std::endl;
-                break;
-            }
+    float *h_expected = new float[recvcount];
+    MPI_Reduce_scatter(h_in, h_expected, &recvcount, MPI_FLOAT, MPI_SUM, MPI_COMM_WORLD);
+
+    bool success = true;
+    for (std::size_t i = 0; i < recvcount; i++) {
+        if (std::fabs(h_result[i] - h_expected[i]) > 1e-4f) {
+            success = false;
+            break;
         }
-        std::cout << "GPU " << gpu << ": " << (success ? "PASS" : "FAIL") << std::endl;
-        if (!success) all_success = false;
-        delete[] verify_data;
     }
+    std::cout << "Device " << world_rank << ": " << (success ? "PASS" : "FAIL") << std::endl;
 
-    std::cout << "Overall result: " << (all_success ? "PASS" : "FAIL") << std::endl;
+    delete[] h_in;
+    delete[] h_result;
+    delete[] h_expected;
+    CUDA_CHECK(cudaFree(d_sendbuff));
+    CUDA_CHECK(cudaFree(d_recvbuff));
 
-    // Cleanup
-    for (int i = 0; i < num_gpus; i++) {
-        CHECK_CUDA(cudaSetDevice(i));
-        CHECK_CUDA(cudaFree(sendbuff[i]));
-        CHECK_CUDA(cudaFree(recvbuff[i]));
-        delete[] h_in[i];
-        delete[] h_expected[i];
-    }
-
+    MPI_Finalize();
     return 0;
 }

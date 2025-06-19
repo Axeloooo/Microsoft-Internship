@@ -10,6 +10,7 @@
  */
 
 #include <cuda_runtime.h>
+#include <mpi.h>
 
 #include <cmath>
 #include <iostream>
@@ -25,87 +26,60 @@ constexpr std::size_t kBytes = (kN * sizeof(float));
 /**
  * @brief Main function to demonstrate AllGather operation using MCCL
  *
- * @param argc
- * @param argv
+ * @param argc argument count
+ * @param argv argument vector
  * @return int
  */
 int main(int argc, char **argv) {
-    int num_gpus = 0;
-    CHECK_CUDA(cudaGetDeviceCount(&num_gpus));
-    std::cout << "Number of GPUs available: " << num_gpus << std::endl;
+    MPI_Init(&argc, &argv);
 
-    if (num_gpus == 0) {
-        std::cerr << "No GPUs available!" << std::endl;
-        return 1;
-    }
+    int world_size;
+    MPI_Comm_size(MPI_COMM_WORLD, &world_size);
 
-    // Initialize MCCL library
-    MCCL<float> mccl(num_gpus);
+    int world_rank;
+    MPI_Comm_rank(MPI_COMM_WORLD, &world_rank);
 
-    // Host data for each GPU
-    std::vector<float *> h_in(num_gpus);
-    for (int i = 0; i < num_gpus; i++) {
-        h_in[i] = new float[kN];
-        InitVector<float>(h_in[i], kN);
-    }
+    CUDA_CHECK(cudaSetDevice(world_rank));
 
-    // Allocate buffers for MCCL-style API
-    std::vector<float *> sendbuff(num_gpus);
-    std::vector<float *> recvbuff(num_gpus);
-
-    // Allocate GPU memory
-    const int total_bytes = kBytes * num_gpus;
-    for (int i = 0; i < num_gpus; i++) {
-        CHECK_CUDA(cudaSetDevice(i));
-        CHECK_CUDA(cudaMalloc(&sendbuff[i], kBytes));       // Input: N elements per GPU
-        CHECK_CUDA(cudaMalloc(&recvbuff[i], total_bytes));  // Output: N*NUM_GPUS elements per GPU
-    }
-
-    // Initialize data on each device
-    for (int i = 0; i < num_gpus; i++) {
-        CHECK_CUDA(cudaSetDevice(i));
-        CHECK_CUDA(cudaMemcpy(sendbuff[i], h_in[i], kBytes, cudaMemcpyHostToDevice));
-    }
-
-    // Perform allgather operation using MCCL
-    std::cout << "Performing AllGather operation..." << std::endl;
-    mccl.AllGather(sendbuff, recvbuff, kN);
-
-    // Verify results
-    std::cout << "AllGather completed. Verifying results..." << std::endl;
-    bool all_success = true;
-    for (int i = 0; i < num_gpus; i++) {
-        CHECK_CUDA(cudaSetDevice(i));
-        float *verify_data = new float[kN * num_gpus];
-        CHECK_CUDA(cudaMemcpy(verify_data, recvbuff[i], total_bytes, cudaMemcpyDeviceToHost));
-
-        bool success = true;
-        for (int src = 0; src < num_gpus; src++) {
-            for (int j = 0; j < kN; j++) {
-                const int idx = src * kN + j;
-                const float expected = h_in[src][j];
-                if (std::fabs(verify_data[idx] - expected) > 1e-5f) {
-                    success = false;
-                    std::cout << "Mismatch at GPU " << i << ", index " << idx << ": expected " << expected << ", got " << verify_data[idx] << std::endl;
-                    break;
-                }
-            }
-            if (!success) break;
+    for (int i = 0; i < world_size; ++i) {
+        if (i != world_rank) {
+            CUDA_CHECK(cudaDeviceEnablePeerAccess(i, 0));
         }
-        std::cout << "GPU " << i << ": " << (success ? "PASS" : "FAIL") << std::endl;
-        if (!success) all_success = false;
-        delete[] verify_data;
     }
 
-    std::cout << "Overall result: " << (all_success ? "PASS" : "FAIL") << std::endl;
+    float *d_sendbuff = nullptr;
+    float *d_recvbuff = nullptr;
+    CUDA_CHECK(cudaMalloc(&d_sendbuff, kBytes));
+    CUDA_CHECK(cudaMalloc(&d_recvbuff, kBytes * world_size));
 
-    // Cleanup
-    for (int i = 0; i < num_gpus; i++) {
-        CHECK_CUDA(cudaSetDevice(i));
-        CHECK_CUDA(cudaFree(sendbuff[i]));
-        CHECK_CUDA(cudaFree(recvbuff[i]));
-        delete[] h_in[i];
+    float *h_in = new float[kN];
+    InitVector<float>(h_in, kN);
+    CUDA_CHECK(cudaMemcpy(d_sendbuff, h_in, kBytes, cudaMemcpyHostToDevice));
+
+    MCCL<float> mccl(world_rank, world_size);
+    mccl.AllGather(d_sendbuff, d_recvbuff, kN);
+
+    float *h_result = new float[kN * world_size];
+    CUDA_CHECK(cudaMemcpy(h_result, d_recvbuff, kBytes * world_size, cudaMemcpyDeviceToHost));
+
+    float *h_expected = new float[kN * world_size];
+    MPI_Allgather(h_in, kN, MPI_FLOAT, h_expected, kN, MPI_FLOAT, MPI_COMM_WORLD);
+
+    bool success = true;
+    for (size_t i = 0; i < kN * world_size; i++) {
+        if (std::fabs(h_result[i] - h_expected[i]) > 1e-5f) {
+            success = false;
+            break;
+        }
     }
+    std::cout << "Device " << world_rank << ": " << (success ? "PASS" : "FAIL") << std::endl;
 
+    delete[] h_in;
+    delete[] h_result;
+    delete[] h_expected;
+    CUDA_CHECK(cudaFree(d_sendbuff));
+    CUDA_CHECK(cudaFree(d_recvbuff));
+
+    MPI_Finalize();
     return 0;
 }

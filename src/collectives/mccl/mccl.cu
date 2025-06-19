@@ -20,7 +20,6 @@
 #include "checker.cuh"
 #include "mccl.cuh"
 
-// CUDA kernel definitions for reduction operations
 constexpr std::size_t kBlockSize = 256;
 
 /**
@@ -112,7 +111,7 @@ void PerformReduction(const T *a, const T *b, T *result, const std::size_t &n, c
             assert(false);
     }
 
-    CHECK_CUDA(cudaGetLastError());
+    CUDA_CHECK(cudaGetLastError());
 }
 
 /**
@@ -127,279 +126,150 @@ template <typename T>
 void FinalizeAverage(T *data, const std::size_t &n, const std::size_t &gpu_count, const cudaStream_t &stream) {
     const std::size_t grid_size = (n + kBlockSize - 1) / kBlockSize;
     VectorDivideScalar<<<grid_size, kBlockSize, 0, stream>>>(data, static_cast<T>(gpu_count), data, n);
-    CHECK_CUDA(cudaGetLastError());
+    CUDA_CHECK(cudaGetLastError());
 }
 
 /**
- * @brief Construct a new MCCL object
+ * @brief Construct a new MCCL<T>::MCCL object
  *
  * @param gpus Number of GPUs available for collective operations
  */
 template <typename T>
-MCCL<T>::MCCL(const std::size_t &gpus) : num_gpus_(gpus), streams_(gpus), tmpbuff_(gpus) {
-    for (std::size_t i = 0; i < gpus; i++) {
-        for (std::size_t j = 0; j < gpus; j++) {
-            if (i != j) {
-                CHECK_CUDA(cudaSetDevice(static_cast<int>(i)));
-                int can_access;
-                CHECK_CUDA(cudaDeviceCanAccessPeer(&can_access, static_cast<int>(i), static_cast<int>(j)));
-                if (can_access) {
-                    CHECK_CUDA(cudaDeviceEnablePeerAccess(static_cast<int>(j), 0));
-                }
-            }
-        }
-    }
-
-    for (std::size_t gpu = 0; gpu < num_gpus_; gpu++) {
-        CHECK_CUDA(cudaSetDevice(static_cast<int>(gpu)));
-        CHECK_CUDA(cudaStreamCreate(&streams_[gpu]));
-        tmpbuff_[gpu] = nullptr;
-    }
+MCCL<T>::MCCL(int rank, int size) : rank_(rank), size_(size) {
+    CUDA_CHECK(cudaStreamCreate(&stream_));
 }
 
 /**
- * @brief Destroy the MCCL object
+ * @brief Destroy the MCCL<T>::MCCL object
  *
  */
 template <typename T>
 MCCL<T>::~MCCL() {
-    for (std::size_t gpu = 0; gpu < num_gpus_; gpu++) {
-        CHECK_CUDA(cudaSetDevice(static_cast<int>(gpu)));
-        if (tmpbuff_[gpu] != nullptr) {
-            CHECK_CUDA(cudaFree(tmpbuff_[gpu]));
-        }
-        CHECK_CUDA(cudaStreamDestroy(streams_[gpu]));
-    }
+    CUDA_CHECK(cudaStreamDestroy(stream_));
 }
 
 /**
- * @brief Helper function to ensure temporary buffers are allocated
+ * @brief All-reduce operation using a ring-based algorithm
  *
- * @param count Number of elements needed
+ * @param sendbuff Input buffer
+ * @param recvbuff Output buffer
+ * @param count Number of elements
+ * @param op Reduction operation
  */
 template <typename T>
-void MCCL<T>::EnsureTmpBuffers(const std::size_t &count) {
-    const std::size_t bytes = count * sizeof(T);
-    for (std::size_t gpu = 0; gpu < num_gpus_; gpu++) {
-        if (tmpbuff_[gpu] == nullptr) {
-            CHECK_CUDA(cudaSetDevice(static_cast<int>(gpu)));
-            CHECK_CUDA(cudaMalloc(&tmpbuff_[gpu], bytes));
-        }
+void MCCL<T>::AllReduce(const T *sendbuff, T *recvbuff, const std::size_t &count, const Operation &op) {
+    const int root = 0;
+    T *reduce_buff = nullptr;
+    if (rank_ == root) {
+        CUDA_CHECK(cudaMalloc(&reduce_buff, count * sizeof(T)));
+    } else {
+        reduce_buff = recvbuff;
     }
+
+    Reduce(sendbuff, reduce_buff, count, root, op);
+
+    Broadcast(reduce_buff, count, root);
+
+    if (reduce_buff != recvbuff) {
+        CUDA_CHECK(cudaMemcpyAsync(recvbuff, reduce_buff, count * sizeof(T), cudaMemcpyDeviceToDevice, stream_));
+    }
+
+    if (rank_ == root) {
+        CUDA_CHECK(cudaFree(reduce_buff));
+    }
+    CUDA_CHECK(cudaStreamSynchronize(stream_));
 }
 
 /**
- * @brief AllReduce operation: reduce and broadcast result to all GPUs
+ * @brief Broadcast operation using a ring-based algorithm
  *
- * @param sendbuff Input buffers on each GPU
- * @param recvbuff Output buffers on each GPU (results stored here)
- * @param count Number of elements per buffer
- * @param op Reduction operation to perform
+ * @param buffer Buffer for the operation
+ * @param count Number of elements
+ * @param root Source GPU ID
  */
 template <typename T>
-void MCCL<T>::AllReduce(const std::vector<T *> &sendbuff, std::vector<T *> &recvbuff, const std::size_t &count, const Operation &op) {
-    EnsureTmpBuffers(count);
-    const std::size_t root = 0;
-    const std::size_t bytes = count * sizeof(T);
-
-    CHECK_CUDA(cudaSetDevice(static_cast<int>(root)));
-    CHECK_CUDA(cudaMemcpyAsync(recvbuff[root], sendbuff[root], bytes, cudaMemcpyDeviceToDevice, streams_[root]));
-
-    for (std::size_t gpu = 0; gpu < num_gpus_; gpu++) {
-        if (gpu != root) {
-            CHECK_CUDA(cudaSetDevice(static_cast<int>(root)));
-            CHECK_CUDA(cudaMemcpyPeerAsync(tmpbuff_[root], static_cast<int>(root), sendbuff[gpu], static_cast<int>(gpu), bytes, streams_[root]));
-            CHECK_CUDA(cudaStreamSynchronize(streams_[root]));
-            PerformReduction(recvbuff[root], tmpbuff_[root], recvbuff[root], count, op, streams_[root]);
-        }
-    }
-
-    if (op == AVG) {
-        CHECK_CUDA(cudaSetDevice(static_cast<int>(root)));
-        FinalizeAverage(recvbuff[root], count, num_gpus_, streams_[root]);
-        CHECK_CUDA(cudaStreamSynchronize(streams_[root]));
-    }
-
-    for (std::size_t gpu = 0; gpu < num_gpus_; gpu++) {
-        if (gpu != root) {
-            CHECK_CUDA(cudaSetDevice(static_cast<int>(gpu)));
-            CHECK_CUDA(cudaMemcpyPeerAsync(recvbuff[gpu], static_cast<int>(gpu), recvbuff[root], static_cast<int>(root), bytes, streams_[gpu]));
-        }
-    }
-
-    for (std::size_t gpu = 0; gpu < num_gpus_; gpu++) {
-        CHECK_CUDA(cudaSetDevice(static_cast<int>(gpu)));
-        CHECK_CUDA(cudaStreamSynchronize(streams_[gpu]));
-    }
-}
-
-/**
- * @brief Broadcast operation: distribute data from root to all GPUs
- *
- * @param sendbuff Input buffer (only root's buffer is used)
- * @param recvbuff Output buffers on each GPU (results stored here)
- * @param count Number of elements per buffer
- * @param root Source GPU ID (0-indexed)
- */
-template <typename T>
-void MCCL<T>::Broadcast(const std::vector<T *> &sendbuff, std::vector<T *> &recvbuff, const std::size_t &count, const std::size_t &root) {
-    if (root >= num_gpus_) {
-        std::cerr << "Error: Root GPU " << root << " is invalid. Must be < " << num_gpus_ << std::endl;
-        std::exit(EXIT_FAILURE);
-    }
-
-    const std::size_t bytes = count * sizeof(T);
-
-    CHECK_CUDA(cudaSetDevice(static_cast<int>(root)));
-    CHECK_CUDA(cudaMemcpyAsync(recvbuff[root], sendbuff[root], bytes, cudaMemcpyDeviceToDevice, streams_[root]));
-
-    for (std::size_t gpu = 0; gpu < num_gpus_; gpu++) {
-        if (gpu != root) {
-            CHECK_CUDA(cudaSetDevice(static_cast<int>(gpu)));
-            CHECK_CUDA(cudaMemcpyPeerAsync(recvbuff[gpu], static_cast<int>(gpu), recvbuff[root], static_cast<int>(root), bytes, streams_[gpu]));
-        }
-    }
-
-    for (std::size_t gpu = 0; gpu < num_gpus_; gpu++) {
-        CHECK_CUDA(cudaSetDevice(static_cast<int>(gpu)));
-        CHECK_CUDA(cudaStreamSynchronize(streams_[gpu]));
-    }
-}
-
-/**
- * @brief Reduce operation: reduce data from all GPUs to root
- *
- * @param sendbuff Input buffers on each GPU
- * @param recvbuff Output buffer (only root's buffer receives result)
- * @param count Number of elements per buffer
- * @param root Destination GPU ID (0-indexed)
- * @param op Reduction operation to perform
- */
-template <typename T>
-void MCCL<T>::Reduce(const std::vector<T *> &sendbuff, std::vector<T *> &recvbuff, const std::size_t &count, const std::size_t &root, const Operation &op) {
-    if (root >= num_gpus_) {
-        std::cerr << "Error: Root GPU " << root << " is invalid. Must be < " << num_gpus_ << std::endl;
-        std::exit(EXIT_FAILURE);
-    }
-
-    EnsureTmpBuffers(count);
-    const std::size_t bytes = count * sizeof(T);
-
-    CHECK_CUDA(cudaSetDevice(static_cast<int>(root)));
-    CHECK_CUDA(cudaMemcpyAsync(recvbuff[root], sendbuff[root], bytes, cudaMemcpyDeviceToDevice, streams_[root]));
-
-    for (std::size_t gpu = 0; gpu < num_gpus_; gpu++) {
-        if (gpu != root) {
-            CHECK_CUDA(cudaSetDevice(static_cast<int>(root)));
-            CHECK_CUDA(cudaMemcpyPeerAsync(tmpbuff_[root], static_cast<int>(root), sendbuff[gpu], static_cast<int>(gpu), bytes, streams_[root]));
-            CHECK_CUDA(cudaStreamSynchronize(streams_[root]));
-            PerformReduction(recvbuff[root], tmpbuff_[root], recvbuff[root], count, op, streams_[root]);
-        }
-    }
-
-    if (op == AVG) {
-        CHECK_CUDA(cudaSetDevice(static_cast<int>(root)));
-        FinalizeAverage(recvbuff[root], count, num_gpus_, streams_[root]);
-        CHECK_CUDA(cudaStreamSynchronize(streams_[root]));
-    }
-
-    CHECK_CUDA(cudaSetDevice(static_cast<int>(root)));
-    CHECK_CUDA(cudaStreamSynchronize(streams_[root]));
-}
-
-/**
- * @brief All-gather operation: gather data from all GPUs to all GPUs
- *
- * @param sendbuff Input buffers on each GPU (count elements each)
- * @param recvbuff Output buffers on each GPU (count*gpus elements each)
- * @param count Number of elements per input buffer
- */
-template <typename T>
-void MCCL<T>::AllGather(const std::vector<T *> &sendbuff, std::vector<T *> &recvbuff, const std::size_t &count) {
-    const std::size_t bytesPerChunk = count * sizeof(T);
-
-    for (std::size_t src = 0; src < num_gpus_; src++) {
-        for (std::size_t dst = 0; dst < num_gpus_; dst++) {
-            const std::size_t offset = src * count;
-
-            if (src == dst) {
-                CHECK_CUDA(cudaSetDevice(static_cast<int>(dst)));
-                CHECK_CUDA(cudaMemcpyAsync(recvbuff[dst] + offset, sendbuff[src], bytesPerChunk, cudaMemcpyDeviceToDevice, streams_[dst]));
-            } else {
-                CHECK_CUDA(cudaSetDevice(static_cast<int>(dst)));
-                CHECK_CUDA(cudaMemcpyPeerAsync(recvbuff[dst] + offset, static_cast<int>(dst), sendbuff[src], static_cast<int>(src), bytesPerChunk, streams_[dst]));
+void MCCL<T>::Broadcast(T *buffer, const std::size_t &count, const std::size_t &root) {
+    if (rank_ == root) {
+        for (std::size_t i = 0; i < size_; ++i) {
+            if (i != rank_) {
+                CUDA_CHECK(cudaMemcpyPeerAsync(buffer, i, buffer, rank_, count * sizeof(T), stream_));
             }
         }
     }
-
-    for (std::size_t gpu = 0; gpu < num_gpus_; gpu++) {
-        CHECK_CUDA(cudaSetDevice(static_cast<int>(gpu)));
-        CHECK_CUDA(cudaStreamSynchronize(streams_[gpu]));
-    }
+    CUDA_CHECK(cudaStreamSynchronize(stream_));
 }
 
 /**
- * @brief Reduce-scatter operation: reduce and scatter chunks to GPUs
+ * @brief Reduce operation using a ring-based algorithm
  *
- * @param sendbuff Input buffers on each GPU (count*gpus elements each)
- * @param recvbuff Output buffers on each GPU (count elements each)
- * @param count Number of elements per output buffer (input is count*gpus)
- * @param op Reduction operation to perform
+ * @param sendbuff Input buffer
+ * @param recvbuff Output buffer
+ * @param count Number of elements
+ * @param root Destination GPU ID
+ * @param op Reduction operation
  */
 template <typename T>
-void MCCL<T>::ReduceScatter(const std::vector<T *> &sendbuff, std::vector<T *> &recvbuff, const std::size_t &count, const Operation &op) {
-    EnsureTmpBuffers(count);
-    const std::size_t bytesPerChunk = count * sizeof(T);
-
-    for (std::size_t gpu = 0; gpu < num_gpus_; gpu++) {
-        const std::size_t offset = gpu * count;
-
-        CHECK_CUDA(cudaSetDevice(static_cast<int>(gpu)));
-        CHECK_CUDA(cudaMemcpyAsync(recvbuff[gpu], sendbuff[gpu] + offset, bytesPerChunk, cudaMemcpyDeviceToDevice, streams_[gpu]));
-
-        for (std::size_t src = 0; src < num_gpus_; src++) {
-            if (src != gpu) {
-                CHECK_CUDA(cudaSetDevice(static_cast<int>(gpu)));
-                CHECK_CUDA(cudaMemcpyPeerAsync(tmpbuff_[gpu], static_cast<int>(gpu), sendbuff[src] + offset, static_cast<int>(src), bytesPerChunk, streams_[gpu]));
-                CHECK_CUDA(cudaStreamSynchronize(streams_[gpu]));
-                PerformReduction(recvbuff[gpu], tmpbuff_[gpu], recvbuff[gpu], count, op, streams_[gpu]);
+void MCCL<T>::Reduce(const T *sendbuff, T *recvbuff, const std::size_t &count, const std::size_t &root, const Operation &op) {
+    if (rank_ == root) {
+        CUDA_CHECK(cudaMemcpyAsync(recvbuff, sendbuff, count * sizeof(T), cudaMemcpyDeviceToDevice, stream_));
+        T *temp_buff;
+        CUDA_CHECK(cudaMalloc(&temp_buff, count * sizeof(T)));
+        for (std::size_t i = 0; i < size_; i++) {
+            if (i != root) {
+                CUDA_CHECK(cudaMemcpyPeerAsync(temp_buff, rank_, sendbuff, i, count * sizeof(T), stream_));
+                PerformReduction(recvbuff, temp_buff, recvbuff, count, op, stream_);
             }
         }
+        CUDA_CHECK(cudaFree(temp_buff));
+    }
+    CUDA_CHECK(cudaStreamSynchronize(stream_));
+}
 
-        if (op == AVG) {
-            CHECK_CUDA(cudaSetDevice(static_cast<int>(gpu)));
-            FinalizeAverage(recvbuff[gpu], count, num_gpus_, streams_[gpu]);
+/**
+ * @brief All-gather operation using a ring-based algorithm
+ *
+ * @param sendbuff Input buffer
+ * @param recvbuff Output buffer
+ * @param count Number of elements
+ */
+template <typename T>
+void MCCL<T>::AllGather(const T *sendbuff, T *recvbuff, const std::size_t &count) {
+    for (std::size_t i = 0; i < size_; i++) {
+        if (i == rank_) {
+            CUDA_CHECK(cudaMemcpyAsync(recvbuff + i * count, sendbuff, count * sizeof(T), cudaMemcpyDeviceToDevice, stream_));
+        } else {
+            CUDA_CHECK(cudaMemcpyPeerAsync(recvbuff + i * count, rank_, sendbuff, i, count * sizeof(T), stream_));
+        }
+    }
+    CUDA_CHECK(cudaStreamSynchronize(stream_));
+}
+
+/**
+ * @brief Reduce-scatter operation using a ring-based algorithm
+ *
+ * @param sendbuff Input buffer
+ * @param recvbuff Output buffer
+ * @param count Number of elements
+ * @param op Reduction operation
+ */
+template <typename T>
+void MCCL<T>::ReduceScatter(const T *sendbuff, T *recvbuff, const std::size_t &recvcount, const Operation &op) {
+    const T *my_chunk_in_sendbuff = sendbuff + rank_ * recvcount;
+    CUDA_CHECK(cudaMemcpyAsync(recvbuff, my_chunk_in_sendbuff, recvcount * sizeof(T), cudaMemcpyDeviceToDevice, stream_));
+
+    T *temp_buff;
+    CUDA_CHECK(cudaMalloc(&temp_buff, recvcount * sizeof(T)));
+
+    for (std::size_t i = 0; i < size_; i++) {
+        if (i != rank_) {
+            const T *remote_chunk = sendbuff + rank_ * recvcount;
+            CUDA_CHECK(cudaMemcpyPeerAsync(temp_buff, rank_, remote_chunk, i, recvcount * sizeof(T), stream_));
+            PerformReduction(recvbuff, temp_buff, recvbuff, recvcount, op, stream_);
         }
     }
 
-    for (std::size_t gpu = 0; gpu < num_gpus_; gpu++) {
-        CHECK_CUDA(cudaSetDevice(static_cast<int>(gpu)));
-        CHECK_CUDA(cudaStreamSynchronize(streams_[gpu]));
-    }
-}
-
-/**
- * @brief Get number of GPUs
- *
- * @return Number of available GPUs
- */
-template <typename T>
-const std::size_t &MCCL<T>::GetGpus() const {
-    return num_gpus_;
-}
-
-/**
- * @brief Get reference to CUDA streams vector
- *
- * @return Reference to streams vector
- */
-template <typename T>
-const std::vector<cudaStream_t> &MCCL<T>::GetStreams() const {
-    return streams_;
+    CUDA_CHECK(cudaFree(temp_buff));
+    CUDA_CHECK(cudaStreamSynchronize(stream_));
 }
 
 template class MCCL<float>;
-
-template void PerformReduction<float>(const float *a, const float *b, float *result, const std::size_t &n, const Operation &op, const cudaStream_t &stream);
-
-template void FinalizeAverage<float>(float *data, const std::size_t &n, const std::size_t &gpu_count, const cudaStream_t &stream);

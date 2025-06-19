@@ -14,8 +14,7 @@
 #define K 1024
 #define BLOCK_DIM 16
 
-void sgemmCpu(const int m, const int n, const int k, const float alpha, const float *A, const float *B,
-              const float beta, float *C) {
+void sgemmCpu(const int m, const int n, const int k, const float alpha, const float *A, const float *B, const float beta, float *C) {
     for (int i = 0; i < m; ++i) {
         for (int j = 0; j < n; ++j) {
             float tmp = 0.0f;
@@ -34,8 +33,7 @@ int main() {
 
     // Set dimensions for kernel launch
     dim3 blockDim(BLOCK_DIM, BLOCK_DIM);
-    dim3 gridDim((M + BLOCK_DIM - 1) / BLOCK_DIM,
-                 (N + BLOCK_DIM - 1) / BLOCK_DIM);
+    dim3 gridDim((M + BLOCK_DIM - 1) / BLOCK_DIM, (N + BLOCK_DIM - 1) / BLOCK_DIM);
 
     // Calculate memory sizes
     size_t bytesA = M * K * sizeof(float);
@@ -64,16 +62,16 @@ int main() {
 
     // Allocate device memory
     float *d_A, *d_B, *d_C, *d_C_cublas;
-    CHECK_CUDA(cudaMalloc(&d_A, bytesA));
-    CHECK_CUDA(cudaMalloc(&d_B, bytesB));
-    CHECK_CUDA(cudaMalloc(&d_C, bytesC));
-    CHECK_CUDA(cudaMalloc(&d_C_cublas, bytesC));
+    CUDA_CHECK(cudaMalloc(&d_A, bytesA));
+    CUDA_CHECK(cudaMalloc(&d_B, bytesB));
+    CUDA_CHECK(cudaMalloc(&d_C, bytesC));
+    CUDA_CHECK(cudaMalloc(&d_C_cublas, bytesC));
 
     // Copy data to device
-    CHECK_CUDA(cudaMemcpy(d_A, h_A, bytesA, cudaMemcpyHostToDevice));
-    CHECK_CUDA(cudaMemcpy(d_B, h_B, bytesB, cudaMemcpyHostToDevice));
-    CHECK_CUDA(cudaMemcpy(d_C, h_C, bytesC, cudaMemcpyHostToDevice));
-    CHECK_CUDA(cudaMemcpy(d_C_cublas, h_C, bytesC, cudaMemcpyHostToDevice));
+    CUDA_CHECK(cudaMemcpy(d_A, h_A, bytesA, cudaMemcpyHostToDevice));
+    CUDA_CHECK(cudaMemcpy(d_B, h_B, bytesB, cudaMemcpyHostToDevice));
+    CUDA_CHECK(cudaMemcpy(d_C, h_C, bytesC, cudaMemcpyHostToDevice));
+    CUDA_CHECK(cudaMemcpy(d_C_cublas, h_C, bytesC, cudaMemcpyHostToDevice));
 
     float alpha = 1.0f;
     float beta = 1.0f;
@@ -89,66 +87,60 @@ int main() {
     std::cout << "Warming up GPUs..." << std::endl;
     for (int i = 0; i < 3; ++i) {
         naiveSgemm<<<gridDim, blockDim>>>(M, N, K, alpha, d_A, d_B, beta, d_C);
-        CHECK_CUDA(cudaGetLastError());
-        CHECK_CUDA(cudaDeviceSynchronize());
+        CUDA_CHECK(cudaGetLastError());
+        CUDA_CHECK(cudaDeviceSynchronize());
 
-        coalescingSgemm<BLOCK_DIM>
-            <<<gridDim, blockDim>>>(M, N, K, alpha, d_A, d_B, beta, d_C);
-        CHECK_CUDA(cudaGetLastError());
-        CHECK_CUDA(cudaDeviceSynchronize());
+        coalescingSgemm<BLOCK_DIM><<<gridDim, blockDim>>>(M, N, K, alpha, d_A, d_B, beta, d_C);
+        CUDA_CHECK(cudaGetLastError());
+        CUDA_CHECK(cudaDeviceSynchronize());
 
-        CHECK_CUBLAS(cublasSgemm(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, N, M,
-                                 K, &alpha, d_B, N, d_A, K, &beta, d_C_cublas,
-                                 N));
-        CHECK_CUDA(cudaDeviceSynchronize());
+        CHECK_CUBLAS(cublasSgemm(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, N, M, K, &alpha, d_B, N, d_A, K, &beta, d_C_cublas, N));
+        CUDA_CHECK(cudaDeviceSynchronize());
     }
 
     // Reset matrices after warmup
-    CHECK_CUDA(cudaMemcpy(d_C, h_C, bytesC, cudaMemcpyHostToDevice));
-    CHECK_CUDA(cudaMemcpy(d_C_cublas, h_C, bytesC, cudaMemcpyHostToDevice));
+    CUDA_CHECK(cudaMemcpy(d_C, h_C, bytesC, cudaMemcpyHostToDevice));
+    CUDA_CHECK(cudaMemcpy(d_C_cublas, h_C, bytesC, cudaMemcpyHostToDevice));
 
     // Perform naive SGEMM
     CudaTimer naiveTimer("Naive SGEMM GPU", totalBytes, totalFlops);
     naiveTimer.Start();
     naiveSgemm<<<gridDim, blockDim>>>(M, N, K, alpha, d_A, d_B, beta, d_C);
-    CHECK_CUDA(cudaGetLastError());
-    CHECK_CUDA(cudaDeviceSynchronize());
+    CUDA_CHECK(cudaGetLastError());
+    CUDA_CHECK(cudaDeviceSynchronize());
     naiveTimer.Stop();
     naiveTimer.Print();
 
     // Copy results back and verify
-    CHECK_CUDA(cudaMemcpy(h_C, d_C, bytesC, cudaMemcpyDeviceToHost));
+    CUDA_CHECK(cudaMemcpy(h_C, d_C, bytesC, cudaMemcpyDeviceToHost));
     VerifyMatrix<float>(h_C_cpu, h_C, M, N);
 
     // Reset output matrix CHECK THIS
-    CHECK_CUDA(cudaMemcpy(d_C, h_C, bytesC, cudaMemcpyHostToDevice));
+    CUDA_CHECK(cudaMemcpy(d_C, h_C, bytesC, cudaMemcpyHostToDevice));
 
     // Perform coalescing SGEMM
     CudaTimer coalescingTimer("Coalescing SGEMM GPU", totalBytes, totalFlops);
     coalescingTimer.Start();
-    coalescingSgemm<BLOCK_DIM>
-        <<<gridDim, blockDim>>>(M, N, K, alpha, d_A, d_B, beta, d_C);
-    CHECK_CUDA(cudaGetLastError());
-    CHECK_CUDA(cudaDeviceSynchronize());
+    coalescingSgemm<BLOCK_DIM><<<gridDim, blockDim>>>(M, N, K, alpha, d_A, d_B, beta, d_C);
+    CUDA_CHECK(cudaGetLastError());
+    CUDA_CHECK(cudaDeviceSynchronize());
     coalescingTimer.Stop();
     coalescingTimer.Print();
 
     // Copy results back and verify
-    CHECK_CUDA(cudaMemcpy(h_C, d_C, bytesC, cudaMemcpyDeviceToHost));
+    CUDA_CHECK(cudaMemcpy(h_C, d_C, bytesC, cudaMemcpyDeviceToHost));
     VerifyMatrix<float>(h_C_cpu, h_C, M, N);
 
     // Perform cuBLAS SGEMM
     CudaTimer cublasTimer("cuBLAS SGEMM", totalBytes, totalFlops);
     cublasTimer.Start();
-    CHECK_CUBLAS(cublasSgemm(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, N, M, K,
-                             &alpha, d_B, N, d_A, K, &beta, d_C_cublas, N));
-    CHECK_CUDA(cudaDeviceSynchronize());
+    CHECK_CUBLAS(cublasSgemm(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, N, M, K, &alpha, d_B, N, d_A, K, &beta, d_C_cublas, N));
+    CUDA_CHECK(cudaDeviceSynchronize());
     cublasTimer.Stop();
     cublasTimer.Print();
 
     // Copy results back and verify
-    CHECK_CUDA(
-        cudaMemcpy(h_C_cublas, d_C_cublas, bytesC, cudaMemcpyDeviceToHost));
+    CUDA_CHECK(cudaMemcpy(h_C_cublas, d_C_cublas, bytesC, cudaMemcpyDeviceToHost));
     VerifyMatrix<float>(h_C_cpu, h_C_cublas, M, N);
 
     // Clean up
@@ -157,10 +149,10 @@ int main() {
     delete[] h_C;
     delete[] h_C_cpu;
     delete[] h_C_cublas;
-    CHECK_CUDA(cudaFree(d_A));
-    CHECK_CUDA(cudaFree(d_B));
-    CHECK_CUDA(cudaFree(d_C));
-    CHECK_CUDA(cudaFree(d_C_cublas));
+    CUDA_CHECK(cudaFree(d_A));
+    CUDA_CHECK(cudaFree(d_B));
+    CUDA_CHECK(cudaFree(d_C));
+    CUDA_CHECK(cudaFree(d_C_cublas));
     CHECK_CUBLAS(cublasDestroy(cublasHandle));
 
     return 0;
