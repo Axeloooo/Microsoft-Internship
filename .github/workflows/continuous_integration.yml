@@ -21,5 +21,8 @@ jobs:
           cuda: "12.5.0"
           method: "network"
 
+      - name: Install OpenMPI
+        run: sudo apt-get update && sudo apt-get install -y openmpi-bin libopenmpi-dev
+
       - name: Build kernels
         run: make build
