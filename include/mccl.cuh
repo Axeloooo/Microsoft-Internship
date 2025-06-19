@@ -18,8 +18,6 @@
 #include <iostream>
 #include <vector>
 
-#include "mpi.h"
-
 /**
  * @brief Enumeration for reduction operations
  *

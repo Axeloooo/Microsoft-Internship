@@ -229,27 +229,27 @@ $(GEMM_BIN): $(GEMM_SRC) $(TIMER_SRC) $(DATA_SRC)
 $(MCCL_BROADCAST_BIN): $(MCCL_BROADCAST_SRC) $(MCCL_SRC) $(DATA_SRC)
 	@echo "Building MCCL broadcast module…"
 	@mkdir -p $(BUILD_DIR)/collectives/mccl
-	$(NVCC) -ccbin $(MPICXX) $(NVCCFLAGS) -o $@ $^ $(NCCL_LIBS)
+	$(NVCC) -ccbin $(MPICXX) $(NVCCFLAGS) -o $@ $^ 
 
 $(MCCL_ALLGATHER_BIN): $(MCCL_ALLGATHER_SRC) $(MCCL_SRC) $(DATA_SRC)
 	@echo "Building MCCL allgather module…"
 	@mkdir -p $(BUILD_DIR)/collectives/mccl
-	$(NVCC) -ccbin $(MPICXX) $(NVCCFLAGS) -o $@ $^ $(NCCL_LIBS)
+	$(NVCC) -ccbin $(MPICXX) $(NVCCFLAGS) -o $@ $^ 
 
 $(MCCL_ALLREDUCE_BIN): $(MCCL_ALLREDUCE_SRC) $(MCCL_SRC) $(DATA_SRC)
 	@echo "Building MCCL allreduce module…"
 	@mkdir -p $(BUILD_DIR)/collectives/mccl
-	$(NVCC) -ccbin $(MPICXX) $(NVCCFLAGS) -o $@ $^ $(NCCL_LIBS)
+	$(NVCC) -ccbin $(MPICXX) $(NVCCFLAGS) -o $@ $^ 
 
 $(MCCL_REDUCE_BIN): $(MCCL_REDUCE_SRC) $(MCCL_SRC) $(DATA_SRC)
 	@echo "Building MCCL reduction collective module…"
 	@mkdir -p $(BUILD_DIR)/collectives/mccl
-	$(NVCC) -ccbin $(MPICXX) $(NVCCFLAGS) -o $@ $^ $(NCCL_LIBS)
+	$(NVCC) -ccbin $(MPICXX) $(NVCCFLAGS) -o $@ $^ 
 
 $(MCCL_REDUCESCATTER_BIN): $(MCCL_REDUCESCATTER_SRC) $(MCCL_SRC) $(DATA_SRC)
 	@echo "Building MCCL reducescatter module…"
 	@mkdir -p $(BUILD_DIR)/collectives/mccl
-	$(NVCC) -ccbin $(MPICXX) $(NVCCFLAGS) -o $@ $^ $(NCCL_LIBS)
+	$(NVCC) -ccbin $(MPICXX) $(NVCCFLAGS) -o $@ $^
 
 # ------------------------------------------------------------------------
 # Rules to compile MPI collective modules

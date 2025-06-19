@@ -23,13 +23,26 @@
  *
  */
 #define CUDA_CHECK(call)                                                                                                  \
-    {                                                                                                                     \
+    do {                                                                                                                  \
         cudaError_t err = (call);                                                                                         \
         if (err != cudaSuccess) {                                                                                         \
             std::cerr << "CUDA error in " << __FILE__ << ":" << __LINE__ << ": " << cudaGetErrorString(err) << std::endl; \
             std::exit(EXIT_FAILURE);                                                                                      \
         }                                                                                                                 \
-    }
+    } while (0)
+
+/**
+ * @brief Macro to check MPI function calls for errors.
+ *
+ */
+#define MPI_CHECK(cmd)                                                                               \
+    do {                                                                                             \
+        int err = (cmd);                                                                             \
+        if (err != MPI_SUCCESS) {                                                                    \
+            std::cerr << "MPI error in " << __FILE__ << ":" << __LINE__ << ": " << err << std::endl; \
+            std::exit(EXIT_FAILURE);                                                                 \
+        }                                                                                            \
+    } while (0)
 
 /**
  * @brief Macro to check cuBLAS function calls for errors.
