@@ -5,11 +5,8 @@
 # Compiler and flags
 NVCC        := nvcc	
 NVCCFLAGS   := -I include -arch=sm_90
-MPICXX      := /usr/local/mpi/bin/mpic++
-MPICC       := /usr/local/mpi/bin/mpicc
-MPIRUN      := /usr/local/mpi/bin/mpirun
-MPI_INCLUDE := -I/usr/local/mpi/include
-MPI_LIB     := -L/usr/local/mpi/lib -lmpi
+MPICXX      := mpic++
+MPIRUN      := mpirun
 CUBLAS_LIBS := -lcublas
 NCCL_LIBS   := -lnccl
 
@@ -138,27 +135,32 @@ gemm: $(GEMM_BIN)
 .PHONY: mccl_broadcast
 mccl_broadcast: $(MCCL_BROADCAST_BIN)
 	@echo "Running MCCL broadcast module…"
-	@$(MCCL_BROADCAST_BIN)
+	@echo ${MPIRUN} -np 8 $(MCCL_BROADCAST_BIN)
+	@$(MPIRUN) -np 8 $(MCCL_BROADCAST_BIN)
 
 .PHONY: mccl_allgather
 mccl_allgather: $(MCCL_ALLGATHER_BIN)
 	@echo "Running MCCL allgather module…"
-	@$(MCCL_ALLGATHER_BIN)	
+	@echo ${MPIRUN} -np 8 $(MCCL_ALLGATHER_BIN)
+	@$(MPIRUN) -np 8 $(MCCL_ALLGATHER_BIN)	
 
 .PHONY: mccl_allreduce
 mccl_allreduce: $(MCCL_ALLREDUCE_BIN)
 	@echo "Running MCCL allreduce module…"
-	@$(MCCL_ALLREDUCE_BIN)	
+	@echo ${MPIRUN} -np 8 $(MCCL_ALLREDUCE_BIN)
+	@$(MPIRUN) -np 8 $(MCCL_ALLREDUCE_BIN)	
 
 .PHONY: mccl_reduce
 mccl_reduce: $(MCCL_REDUCE_BIN)
 	@echo "Running MCCL reduce module…"
-	@$(MCCL_REDUCE_BIN)
+	@echo ${MPIRUN} -np 8 $(MCCL_REDUCE_BIN)
+	@$(MPIRUN) -np 8 $(MCCL_REDUCE_BIN)
 
 .PHONY: mccl_reducescatter
 mccl_reducescatter: $(MCCL_REDUCESCATTER_BIN)
 	@echo "Running MCCL reducescatter module…"
-	@$(MCCL_REDUCESCATTER_BIN)	
+	@echo ${MPIRUN} -np 8 $(MCCL_REDUCESCATTER_BIN)
+	@$(MPIRUN) -np 8 $(MCCL_REDUCESCATTER_BIN)	
 
 # ------------------------------------------------------------------------
 # Compile and run MPI collective modules
@@ -166,26 +168,31 @@ mccl_reducescatter: $(MCCL_REDUCESCATTER_BIN)
 .PHONY: mpi_broadcast
 mpi_broadcast: $(MPI_BROADCAST_BIN)
 	@echo "Running MPI broadcast module with 8 processes..."
+	@echo ${MPIRUN} -np 8 $(MPI_BROADCAST_BIN)
 	@$(MPIRUN) -np 8 $(MPI_BROADCAST_BIN)
 
 .PHONY: mpi_allgather
 mpi_allgather: $(MPI_ALLGATHER_BIN)
 	@echo "Running MPI allgather module with 8 processes..."
+	@echo ${MPIRUN} -np 8 $(MPI_ALLGATHER_BIN)
 	@$(MPIRUN) -np 8 $(MPI_ALLGATHER_BIN)
 
 .PHONY: mpi_allreduce
 mpi_allreduce: $(MPI_ALLREDUCE_BIN)
 	@echo "Running MPI allreduce module with 8 processes..."
+	@echo ${MPIRUN} -np 8 $(MPI_ALLREDUCE_BIN)
 	@$(MPIRUN) -np 8 $(MPI_ALLREDUCE_BIN)
 
 .PHONY: mpi_reduce
 mpi_reduce: $(MPI_REDUCE_BIN)
 	@echo "Running MPI reduce module with 8 processes..."
+	@echo ${MPIRUN} -np 8 $(MPI_REDUCE_BIN)
 	@$(MPIRUN) -np 8 $(MPI_REDUCE_BIN)
 
 .PHONY: mpi_reducescatter
 mpi_reducescatter: $(MPI_REDUCESCATTER_BIN)
 	@echo "Running MPI reducescatter module with 8 processes..."
+	@echo ${MPIRUN} -np 8 $(MPI_REDUCESCATTER_BIN)
 	@$(MPIRUN) -np 8 $(MPI_REDUCESCATTER_BIN)	
 
 # ------------------------------------------------------------------------
@@ -222,27 +229,27 @@ $(GEMM_BIN): $(GEMM_SRC) $(TIMER_SRC) $(DATA_SRC)
 $(MCCL_BROADCAST_BIN): $(MCCL_BROADCAST_SRC) $(MCCL_SRC) $(DATA_SRC)
 	@echo "Building MCCL broadcast module…"
 	@mkdir -p $(BUILD_DIR)/collectives/mccl
-	$(NVCC) $(NVCCFLAGS) $(MPI_INCLUDE) -o $@ $^ $(MPI_LIB)
+	$(NVCC) -ccbin $(MPICXX) $(NVCCFLAGS) -o $@ $^ $(NCCL_LIBS)
 
 $(MCCL_ALLGATHER_BIN): $(MCCL_ALLGATHER_SRC) $(MCCL_SRC) $(DATA_SRC)
 	@echo "Building MCCL allgather module…"
 	@mkdir -p $(BUILD_DIR)/collectives/mccl
-	$(NVCC) $(NVCCFLAGS) $(MPI_INCLUDE) -o $@ $^ $(MPI_LIB)
+	$(NVCC) -ccbin $(MPICXX) $(NVCCFLAGS) -o $@ $^ $(NCCL_LIBS)
 
 $(MCCL_ALLREDUCE_BIN): $(MCCL_ALLREDUCE_SRC) $(MCCL_SRC) $(DATA_SRC)
 	@echo "Building MCCL allreduce module…"
 	@mkdir -p $(BUILD_DIR)/collectives/mccl
-	$(NVCC) $(NVCCFLAGS) $(MPI_INCLUDE) -o $@ $^ $(MPI_LIB)
+	$(NVCC) -ccbin $(MPICXX) $(NVCCFLAGS) -o $@ $^ $(NCCL_LIBS)
 
 $(MCCL_REDUCE_BIN): $(MCCL_REDUCE_SRC) $(MCCL_SRC) $(DATA_SRC)
 	@echo "Building MCCL reduction collective module…"
 	@mkdir -p $(BUILD_DIR)/collectives/mccl
-	$(NVCC) $(NVCCFLAGS) $(MPI_INCLUDE) -o $@ $^ $(MPI_LIB)
+	$(NVCC) -ccbin $(MPICXX) $(NVCCFLAGS) -o $@ $^ $(NCCL_LIBS)
 
 $(MCCL_REDUCESCATTER_BIN): $(MCCL_REDUCESCATTER_SRC) $(MCCL_SRC) $(DATA_SRC)
 	@echo "Building MCCL reducescatter module…"
 	@mkdir -p $(BUILD_DIR)/collectives/mccl
-	$(NVCC) $(NVCCFLAGS) $(MPI_INCLUDE) -o $@ $^ $(MPI_LIB)
+	$(NVCC) -ccbin $(MPICXX) $(NVCCFLAGS) -o $@ $^ $(NCCL_LIBS)
 
 # ------------------------------------------------------------------------
 # Rules to compile MPI collective modules
@@ -250,27 +257,27 @@ $(MCCL_REDUCESCATTER_BIN): $(MCCL_REDUCESCATTER_SRC) $(MCCL_SRC) $(DATA_SRC)
 $(MPI_BROADCAST_BIN): $(MPI_BROADCAST_SRC) $(DATA_SRC)
 	@echo "Building MPI broadcast module…"
 	@mkdir -p $(BUILD_DIR)/collectives/mpi
-	$(NVCC) $(NVCCFLAGS) $(MPI_INCLUDE) -o $@ $^ $(MPI_LIB)
+	$(NVCC) -ccbin $(MPICXX) $(NVCCFLAGS) -o $@ $^
 
 $(MPI_ALLGATHER_BIN): $(MPI_ALLGATHER_SRC) $(DATA_SRC)
 	@echo "Building MPI allgather module…"
 	@mkdir -p $(BUILD_DIR)/collectives/mpi
-	$(NVCC) $(NVCCFLAGS) $(MPI_INCLUDE) -o $@ $^ $(MPI_LIB)
+	$(NVCC) -ccbin $(MPICXX) $(NVCCFLAGS) -o $@ $^
 
 $(MPI_ALLREDUCE_BIN): $(MPI_ALLREDUCE_SRC) $(DATA_SRC)
 	@echo "Building MPI allreduce module…"
 	@mkdir -p $(BUILD_DIR)/collectives/mpi
-	$(NVCC) $(NVCCFLAGS) $(MPI_INCLUDE) -o $@ $^ $(MPI_LIB)
+	$(NVCC) -ccbin $(MPICXX) $(NVCCFLAGS) -o $@ $^
 
 $(MPI_REDUCE_BIN): $(MPI_REDUCE_SRC) $(DATA_SRC)
 	@echo "Building MPI reduce module…"
 	@mkdir -p $(BUILD_DIR)/collectives/mpi
-	$(NVCC) $(NVCCFLAGS) $(MPI_INCLUDE) -o $@ $^ $(MPI_LIB)
+	$(NVCC) -ccbin $(MPICXX) $(NVCCFLAGS) -o $@ $^
 
 $(MPI_REDUCESCATTER_BIN): $(MPI_REDUCESCATTER_SRC) $(DATA_SRC)
 	@echo "Building MPI reducescatter module…"
 	@mkdir -p $(BUILD_DIR)/collectives/mpi
-	$(NVCC) $(NVCCFLAGS) $(MPI_INCLUDE) -o $@ $^ $(MPI_LIB)
+	$(NVCC) -ccbin $(MPICXX) $(NVCCFLAGS) -o $@ $^
 
 # ------------------------------------------------------------------------
 # Cleaning up build files
@@ -278,6 +285,7 @@ $(MPI_REDUCESCATTER_BIN): $(MPI_REDUCESCATTER_SRC) $(DATA_SRC)
 .PHONY: clean
 clean:
 	@echo "Cleaning up build files…"
+	@echo rm -rf $(BUILD_DIR)
 	@rm -rf $(BUILD_DIR)
 
 # ------------------------------------------------------------------------
