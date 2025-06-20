@@ -60,8 +60,9 @@ int main(int argc, char **argv) {
 
     std::vector<float *> remotes(world_size, nullptr);
     for (std::size_t rank = 0; rank < world_size; ++rank) {
-        if (rank == world_rank) continue;
-        CUDA_CHECK(cudaIpcOpenMemHandle(reinterpret_cast<void **>(&remotes[rank]), locals[rank], cudaIpcMemLazyEnablePeerAccess));
+        if (rank != world_rank) {
+            CUDA_CHECK(cudaIpcOpenMemHandle(reinterpret_cast<void **>(&remotes[rank]), locals[rank], cudaIpcMemLazyEnablePeerAccess));
+        }
     }
 
     cudaStream_t stream;
@@ -73,15 +74,15 @@ int main(int argc, char **argv) {
         CUDA_CHECK(cudaMemcpy(d_buff, h_buff.data(), kBytes, cudaMemcpyHostToDevice));
 
         for (std::size_t dst = 0; dst < world_size; ++dst) {
-            if (dst == kRootGpu) continue;
-            CUDA_CHECK(cudaMemcpyPeerAsync(remotes[dst], dst, d_buff, kRootGpu, kBytes, stream));
+            if (dst != kRootGpu) {
+                CUDA_CHECK(cudaMemcpyPeerAsync(remotes[dst], dst, d_buff, kRootGpu, kBytes, stream));
+            }
         }
         CUDA_CHECK(cudaStreamSynchronize(stream));
     }
 
     MPI_CHECK(MPI_Barrier(MPI_COMM_WORLD));
 
-    std::cout << "Broadcast completed on rank " << world_rank << ". Verifying results...";
     float *h_verify_data = new float[kN];
     CUDA_CHECK(cudaMemcpy(h_verify_data, d_buff, kBytes, cudaMemcpyDeviceToHost));
 
