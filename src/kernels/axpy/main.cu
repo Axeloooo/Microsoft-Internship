@@ -51,23 +51,22 @@ int main() {
     float4 *d_x4, *d_y4;
 
     // Allocate device memory
-    CHECK_CUDA(cudaMalloc(&d_x, bytes));
-    CHECK_CUDA(cudaMalloc(&d_y_gpu, bytes));
-    CHECK_CUDA(cudaMalloc(&d_y_cublas, bytes));
+    CUDA_CHECK(cudaMalloc(&d_x, bytes));
+    CUDA_CHECK(cudaMalloc(&d_y_gpu, bytes));
+    CUDA_CHECK(cudaMalloc(&d_y_cublas, bytes));
 
     // Allocate memory for vectorized version
-    CHECK_CUDA(cudaMalloc(&d_x4, vectorBytes));
-    CHECK_CUDA(cudaMalloc(&d_y4, vectorBytes));
+    CUDA_CHECK(cudaMalloc(&d_x4, vectorBytes));
+    CUDA_CHECK(cudaMalloc(&d_y4, vectorBytes));
 
     // Copy data from host to device
-    CHECK_CUDA(cudaMemcpy(d_x, h_x, bytes, cudaMemcpyHostToDevice));
-    CHECK_CUDA(cudaMemcpy(d_y_gpu, h_y_gpu, bytes, cudaMemcpyHostToDevice));
-    CHECK_CUDA(
-        cudaMemcpy(d_y_cublas, h_y_cublas, bytes, cudaMemcpyHostToDevice));
+    CUDA_CHECK(cudaMemcpy(d_x, h_x, bytes, cudaMemcpyHostToDevice));
+    CUDA_CHECK(cudaMemcpy(d_y_gpu, h_y_gpu, bytes, cudaMemcpyHostToDevice));
+    CUDA_CHECK(cudaMemcpy(d_y_cublas, h_y_cublas, bytes, cudaMemcpyHostToDevice));
 
     // Copy data for vectorized version
-    CHECK_CUDA(cudaMemcpy(d_x4, h_x, bytes, cudaMemcpyHostToDevice));
-    CHECK_CUDA(cudaMemcpy(d_y4, h_y_gpu, bytes, cudaMemcpyHostToDevice));
+    CUDA_CHECK(cudaMemcpy(d_x4, h_x, bytes, cudaMemcpyHostToDevice));
+    CUDA_CHECK(cudaMemcpy(d_y4, h_y_gpu, bytes, cudaMemcpyHostToDevice));
 
     // Perform AXPY on CPU
     CudaTimer cpuTimer("AXPY CPU", totalBytes);
@@ -80,34 +79,33 @@ int main() {
     std::cout << "Warming up GPUs..." << std::endl;
     for (int i = 0; i < 3; ++i) {
         naiveSaxpy<<<grid, block>>>(alpha, d_x, d_y_gpu, N);
-        CHECK_CUDA(cudaGetLastError());
-        CHECK_CUDA(cudaDeviceSynchronize());
+        CUDA_CHECK(cudaGetLastError());
+        CUDA_CHECK(cudaDeviceSynchronize());
 
         vectorizedSaxpy<<<vectorGrid, block>>>(alpha, d_x4, d_y4, vectorCount);
-        CHECK_CUDA(cudaGetLastError());
-        CHECK_CUDA(cudaDeviceSynchronize());
+        CUDA_CHECK(cudaGetLastError());
+        CUDA_CHECK(cudaDeviceSynchronize());
 
-        CHECK_CUBLAS(
-            cublasSaxpy(cublasHandle, N, &alpha, d_x, 1, d_y_cublas, 1));
-        CHECK_CUDA(cudaDeviceSynchronize());
+        CHECK_CUBLAS(cublasSaxpy(cublasHandle, N, &alpha, d_x, 1, d_y_cublas, 1));
+        CUDA_CHECK(cudaDeviceSynchronize());
     }
 
     // Reset device vectors to initial values after warmup
-    CHECK_CUDA(cudaMemcpy(d_y_gpu, h_y_init, bytes, cudaMemcpyHostToDevice));
-    CHECK_CUDA(cudaMemcpy(d_y4, h_y_init, bytes, cudaMemcpyHostToDevice));
-    CHECK_CUDA(cudaMemcpy(d_y_cublas, h_y_init, bytes, cudaMemcpyHostToDevice));
+    CUDA_CHECK(cudaMemcpy(d_y_gpu, h_y_init, bytes, cudaMemcpyHostToDevice));
+    CUDA_CHECK(cudaMemcpy(d_y4, h_y_init, bytes, cudaMemcpyHostToDevice));
+    CUDA_CHECK(cudaMemcpy(d_y_cublas, h_y_init, bytes, cudaMemcpyHostToDevice));
 
     // Perform Naive AXPY using CUDA kernel
     CudaTimer gpuTimer("Naive AXPY GPU Kernel", totalBytes);
     gpuTimer.Start();
     naiveSaxpy<<<grid, block>>>(alpha, d_x, d_y_gpu, N);
-    CHECK_CUDA(cudaGetLastError());
-    CHECK_CUDA(cudaDeviceSynchronize());
+    CUDA_CHECK(cudaGetLastError());
+    CUDA_CHECK(cudaDeviceSynchronize());
     gpuTimer.Stop();
     gpuTimer.Print();
 
     // Copy results back to host
-    CHECK_CUDA(cudaMemcpy(h_y_gpu, d_y_gpu, bytes, cudaMemcpyDeviceToHost));
+    CUDA_CHECK(cudaMemcpy(h_y_gpu, d_y_gpu, bytes, cudaMemcpyDeviceToHost));
 
     // Verify results
     VerifyVector<float>(h_y_gpu, h_y_cpu, N);
@@ -116,13 +114,13 @@ int main() {
     CudaTimer vectorizedGpuTimer("Vectorized AXPY GPU Kernel", totalBytes);
     vectorizedGpuTimer.Start();
     vectorizedSaxpy<<<vectorGrid, block>>>(alpha, d_x4, d_y4, vectorCount);
-    CHECK_CUDA(cudaGetLastError());
-    CHECK_CUDA(cudaDeviceSynchronize());
+    CUDA_CHECK(cudaGetLastError());
+    CUDA_CHECK(cudaDeviceSynchronize());
     vectorizedGpuTimer.Stop();
     vectorizedGpuTimer.Print();
 
     // Copy results back to host for vectorized version
-    CHECK_CUDA(cudaMemcpy(h_y_gpu, d_y4, bytes, cudaMemcpyDeviceToHost));
+    CUDA_CHECK(cudaMemcpy(h_y_gpu, d_y4, bytes, cudaMemcpyDeviceToHost));
 
     // Verify results for vectorized version
     VerifyVector<float>(h_y_gpu, h_y_cpu, N);
@@ -135,8 +133,7 @@ int main() {
     cublasTimer.Print();
 
     // Copy results back to host
-    CHECK_CUDA(
-        cudaMemcpy(h_y_cublas, d_y_cublas, bytes, cudaMemcpyDeviceToHost));
+    CUDA_CHECK(cudaMemcpy(h_y_cublas, d_y_cublas, bytes, cudaMemcpyDeviceToHost));
 
     // Verify results
     VerifyVector<float>(h_y_cublas, h_y_cpu, N);
@@ -147,9 +144,9 @@ int main() {
     delete[] h_y_gpu;
     delete[] h_y_cublas;
     delete[] h_y_init;
-    CHECK_CUDA(cudaFree(d_x));
-    CHECK_CUDA(cudaFree(d_y_gpu));
-    CHECK_CUDA(cudaFree(d_y_cublas));
+    CUDA_CHECK(cudaFree(d_x));
+    CUDA_CHECK(cudaFree(d_y_gpu));
+    CUDA_CHECK(cudaFree(d_y_cublas));
     CHECK_CUBLAS(cublasDestroy(cublasHandle));
 
     return 0;

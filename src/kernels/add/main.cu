@@ -36,13 +36,13 @@ int main() {
     float *d_a, *d_b, *d_c_gpu;
 
     // Allocate memory on device
-    CHECK_CUDA(cudaMalloc(&d_a, bytes));
-    CHECK_CUDA(cudaMalloc(&d_b, bytes));
-    CHECK_CUDA(cudaMalloc(&d_c_gpu, bytes));
+    CUDA_CHECK(cudaMalloc(&d_a, bytes));
+    CUDA_CHECK(cudaMalloc(&d_b, bytes));
+    CUDA_CHECK(cudaMalloc(&d_c_gpu, bytes));
 
     // Copy data from host to device
-    CHECK_CUDA(cudaMemcpy(d_a, h_a, bytes, cudaMemcpyHostToDevice));
-    CHECK_CUDA(cudaMemcpy(d_b, h_b, bytes, cudaMemcpyHostToDevice));
+    CUDA_CHECK(cudaMemcpy(d_a, h_a, bytes, cudaMemcpyHostToDevice));
+    CUDA_CHECK(cudaMemcpy(d_b, h_b, bytes, cudaMemcpyHostToDevice));
 
     // Perform Vector Addition on CPU
     CudaTimer cpuTimer("Vector Addition CPU", totalBytes);
@@ -55,21 +55,21 @@ int main() {
     std::cout << "Warming up GPUs..." << std::endl;
     for (int i = 0; i < 3; i++) {
         add<<<grid, block>>>(d_a, d_b, d_c_gpu, N);
-        CHECK_CUDA(cudaGetLastError());
-        CHECK_CUDA(cudaDeviceSynchronize());
+        CUDA_CHECK(cudaGetLastError());
+        CUDA_CHECK(cudaDeviceSynchronize());
     }
 
     // Perform GPU computation
     CudaTimer gpuTimer("Vector Addition GPU Kernel", totalBytes);
     gpuTimer.Start();
     add<<<grid, block>>>(d_a, d_b, d_c_gpu, N);
-    CHECK_CUDA(cudaGetLastError());
-    CHECK_CUDA(cudaDeviceSynchronize());
+    CUDA_CHECK(cudaGetLastError());
+    CUDA_CHECK(cudaDeviceSynchronize());
     gpuTimer.Stop();
     gpuTimer.Print();
 
     // Copy results back to host
-    CHECK_CUDA(cudaMemcpy(h_c_gpu, d_c_gpu, bytes, cudaMemcpyDeviceToHost));
+    CUDA_CHECK(cudaMemcpy(h_c_gpu, d_c_gpu, bytes, cudaMemcpyDeviceToHost));
 
     // Verify results
     VerifyVector<float>(h_c_cpu, h_c_gpu, N);
@@ -79,9 +79,9 @@ int main() {
     delete[] h_b;
     delete[] h_c_cpu;
     delete[] h_c_gpu;
-    CHECK_CUDA(cudaFree(d_a));
-    CHECK_CUDA(cudaFree(d_b));
-    CHECK_CUDA(cudaFree(d_c_gpu));
+    CUDA_CHECK(cudaFree(d_a));
+    CUDA_CHECK(cudaFree(d_b));
+    CUDA_CHECK(cudaFree(d_c_gpu));
 
     return 0;
 }

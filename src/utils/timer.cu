@@ -15,34 +15,33 @@
 #include <iostream>
 #include <string>
 
+#include "checker.cuh"
 #include "timer.cuh"
 
-CudaTimer::CudaTimer(const std::string &label, const std::size_t &bytes) 
-    : label_(label), bytes_(bytes), flops_(0.0), elapsed_ms_(0.0f) {
-    cudaEventCreate(&start_event_);
-    cudaEventCreate(&stop_event_);
+CudaTimer::CudaTimer(const std::string &label, const std::size_t &bytes) : label_(label), bytes_(bytes), flops_(0.0), elapsed_ms_(0.0f) {
+    CUDA_CHECK(cudaEventCreate(&start_event_));
+    CUDA_CHECK(cudaEventCreate(&stop_event_));
 }
 
-CudaTimer::CudaTimer(const std::string &label, const std::size_t &bytes, const double &flops) 
-    : label_(label), bytes_(bytes), flops_(flops), elapsed_ms_(0.0f) {
-    cudaEventCreate(&start_event_);
-    cudaEventCreate(&stop_event_);
+CudaTimer::CudaTimer(const std::string &label, const std::size_t &bytes, const double &flops) : label_(label), bytes_(bytes), flops_(flops), elapsed_ms_(0.0f) {
+    CUDA_CHECK(cudaEventCreate(&start_event_));
+    CUDA_CHECK(cudaEventCreate(&stop_event_));
 }
 
 CudaTimer::~CudaTimer() {
-    cudaEventDestroy(start_event_);
-    cudaEventDestroy(stop_event_);
+    CUDA_CHECK(cudaEventDestroy(start_event_));
+    CUDA_CHECK(cudaEventDestroy(stop_event_));
 }
 
 void CudaTimer::Start() {
     elapsed_ms_ = 0.0f;
-    cudaEventRecord(start_event_);
+    CUDA_CHECK(cudaEventRecord(start_event_));
 }
 
 void CudaTimer::Stop() {
-    cudaEventRecord(stop_event_);
-    cudaEventSynchronize(stop_event_);
-    cudaEventElapsedTime(&elapsed_ms_, start_event_, stop_event_);
+    CUDA_CHECK(cudaEventRecord(stop_event_));
+    CUDA_CHECK(cudaEventSynchronize(stop_event_));
+    CUDA_CHECK(cudaEventElapsedTime(&elapsed_ms_, start_event_, stop_event_));
 }
 
 void CudaTimer::Print() const {

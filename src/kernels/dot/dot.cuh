@@ -1,3 +1,12 @@
+/**
+ * @brief Naive and optimized implementations of the dot product of two vectors
+ *
+ * @param a Vector a
+ * @param b Vector b
+ * @param c Result vector
+ * @param n Size of the vectors
+ * @return __global__
+ */
 __global__ void naiveSdot(const float *a, const float *b, float *c, const int n) {
     const int i = blockIdx.x * blockDim.x + threadIdx.x;
     if (i < n) {

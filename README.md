@@ -143,3 +143,19 @@ docker run --gpus all -it \
   --shm-size=32g \
   nvcr.io/nvidia/pytorch:24.12-py3
 ```
+
+```bash
+docker run --gpus all -it \
+  --user $(id -u):$(id -g) \
+  --name microsoft-internship-axel \
+  --network host \
+  --cap-add=SYS_PTRACE \
+  --device=/dev/infiniband \
+  --device=/dev/dri \
+  --ulimit memlock=-1 \
+  --ulimit stack=67108864 \
+  -v /home/t-axels/Microsoft-Internship:/workspace \
+  --ipc=host \
+  --shm-size=32g \
+  nvcr.io/nvidia/pytorch:24.12-py3
+```

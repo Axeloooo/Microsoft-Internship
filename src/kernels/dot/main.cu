@@ -52,16 +52,16 @@ int main() {
     float *d_a, *d_b, *d_c_gpu;
 
     // Allocate device memory
-    CHECK_CUDA(cudaMalloc(&d_a, bytes));
-    CHECK_CUDA(cudaMalloc(&d_b, bytes));
-    CHECK_CUDA(cudaMalloc(&d_c_gpu, sizeof(float)));
+    CUDA_CHECK(cudaMalloc(&d_a, bytes));
+    CUDA_CHECK(cudaMalloc(&d_b, bytes));
+    CUDA_CHECK(cudaMalloc(&d_c_gpu, sizeof(float)));
 
     // Initialize d_c_gpu to zero
-    CHECK_CUDA(cudaMemset(d_c_gpu, 0, sizeof(float)));
+    CUDA_CHECK(cudaMemset(d_c_gpu, 0, sizeof(float)));
 
     // Copy data from host to device
-    CHECK_CUDA(cudaMemcpy(d_a, h_a, bytes, cudaMemcpyHostToDevice));
-    CHECK_CUDA(cudaMemcpy(d_b, h_b, bytes, cudaMemcpyHostToDevice));
+    CUDA_CHECK(cudaMemcpy(d_a, h_a, bytes, cudaMemcpyHostToDevice));
+    CUDA_CHECK(cudaMemcpy(d_b, h_b, bytes, cudaMemcpyHostToDevice));
 
     // Perform dot product on CPU
     CudaTimer cpuTimer("Dot Product CPU", totalBytes);
@@ -73,32 +73,32 @@ int main() {
     // Perform warm up
     std::cout << "Warming up GPUs..." << std::endl;
     for (int i = 0; i < 3; ++i) {
-        CHECK_CUDA(cudaMemset(d_c_gpu, 0, sizeof(float)));
+        CUDA_CHECK(cudaMemset(d_c_gpu, 0, sizeof(float)));
         naiveSdot<<<grid, block>>>(d_a, d_b, d_c_gpu, N);
-        CHECK_CUDA(cudaGetLastError());
-        CHECK_CUDA(cudaDeviceSynchronize());
+        CUDA_CHECK(cudaGetLastError());
+        CUDA_CHECK(cudaDeviceSynchronize());
 
-        CHECK_CUDA(cudaMemset(d_c_gpu, 0, sizeof(float)));
+        CUDA_CHECK(cudaMemset(d_c_gpu, 0, sizeof(float)));
         optimizedSdot<BLOCK_SIZE><<<optimGrid, block, BLOCK_SIZE * sizeof(float)>>>(d_a, d_b, d_c_gpu, N);
-        CHECK_CUDA(cudaGetLastError());
-        CHECK_CUDA(cudaDeviceSynchronize());
+        CUDA_CHECK(cudaGetLastError());
+        CUDA_CHECK(cudaDeviceSynchronize());
 
         CHECK_CUBLAS(cublasSdot(cublasHandle, N, d_a, 1, d_b, 1, &h_c_cublas));
-        CHECK_CUDA(cudaDeviceSynchronize());
+        CUDA_CHECK(cudaDeviceSynchronize());
     }
 
     // Perform naive dot product using CUDA kernel
     CudaTimer naiveGpuTimer("Naive Dot Product GPU Kernel", totalBytes);
     naiveGpuTimer.Start();
-    CHECK_CUDA(cudaMemset(d_c_gpu, 0, sizeof(float)));
+    CUDA_CHECK(cudaMemset(d_c_gpu, 0, sizeof(float)));
     naiveSdot<<<grid, block>>>(d_a, d_b, d_c_gpu, N);
-    CHECK_CUDA(cudaGetLastError());
-    CHECK_CUDA(cudaDeviceSynchronize());
+    CUDA_CHECK(cudaGetLastError());
+    CUDA_CHECK(cudaDeviceSynchronize());
     naiveGpuTimer.Stop();
     naiveGpuTimer.Print();
 
     // Copy result back to host
-    CHECK_CUDA(cudaMemcpy(&h_c_gpu, d_c_gpu, sizeof(float), cudaMemcpyDeviceToHost));
+    CUDA_CHECK(cudaMemcpy(&h_c_gpu, d_c_gpu, sizeof(float), cudaMemcpyDeviceToHost));
 
     // Check results
     checkResult(h_c_cpu, h_c_gpu);
@@ -106,15 +106,15 @@ int main() {
     // Perform optimized dot product using CUDA kernel
     CudaTimer optimizedGpuTimer("Optimized Dot Product GPU Kernel", totalBytes);
     optimizedGpuTimer.Start();
-    CHECK_CUDA(cudaMemset(d_c_gpu, 0, sizeof(float)));
+    CUDA_CHECK(cudaMemset(d_c_gpu, 0, sizeof(float)));
     optimizedSdot<BLOCK_SIZE><<<optimGrid, block, BLOCK_SIZE * sizeof(float)>>>(d_a, d_b, d_c_gpu, N);
-    CHECK_CUDA(cudaGetLastError());
-    CHECK_CUDA(cudaDeviceSynchronize());
+    CUDA_CHECK(cudaGetLastError());
+    CUDA_CHECK(cudaDeviceSynchronize());
     optimizedGpuTimer.Stop();
     optimizedGpuTimer.Print();
 
     // Copy result back to host
-    CHECK_CUDA(cudaMemcpy(&h_c_gpu, d_c_gpu, sizeof(float), cudaMemcpyDeviceToHost));
+    CUDA_CHECK(cudaMemcpy(&h_c_gpu, d_c_gpu, sizeof(float), cudaMemcpyDeviceToHost));
 
     // Check results
     checkResult(h_c_cpu, h_c_gpu);
@@ -131,9 +131,9 @@ int main() {
     // Clean up
     delete[] h_a;
     delete[] h_b;
-    CHECK_CUDA(cudaFree(d_a));
-    CHECK_CUDA(cudaFree(d_b));
-    CHECK_CUDA(cudaFree(d_c_gpu));
+    CUDA_CHECK(cudaFree(d_a));
+    CUDA_CHECK(cudaFree(d_b));
+    CUDA_CHECK(cudaFree(d_c_gpu));
     CHECK_CUBLAS(cublasDestroy(cublasHandle));
 
     return 0;
