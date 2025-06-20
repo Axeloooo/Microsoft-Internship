@@ -33,42 +33,54 @@ constexpr std::size_t kRootGpu = 0;
  * @return int
  */
 int main(int argc, char **argv) {
-    MPI_Init(&argc, &argv);
+    MPI_CHECK(MPI_Init(&argc, &argv));
 
     int world_size;
-    MPI_Comm_size(MPI_COMM_WORLD, &world_size);
+    MPI_CHECK(MPI_Comm_size(MPI_COMM_WORLD, &world_size));
 
     int world_rank;
-    MPI_Comm_rank(MPI_COMM_WORLD, &world_rank);
+    MPI_CHECK(MPI_Comm_rank(MPI_COMM_WORLD, &world_rank));
 
-    // Set device to the current rank
     CUDA_CHECK(cudaSetDevice(world_rank));
 
-    // Enable peer access between all GPUs
-    for (int i = 0; i < world_size; ++i) {
+    for (std::size_t i = 0; i < world_size; ++i) {
         if (i != world_rank) {
             CUDA_CHECK(cudaDeviceEnablePeerAccess(i, 0));
         }
     }
 
-    float *d_buff = nullptr;
+    float *d_buff;
     CUDA_CHECK(cudaMalloc(&d_buff, kBytes));
 
-    // Initialize data on root device
-    if (world_rank == kRootGpu) {
-        float *h_buff = new float[kN];
-        InitVector<float>(h_buff, kN);
-        CUDA_CHECK(cudaMemcpy(d_buff, h_buff, kBytes, cudaMemcpyHostToDevice));
-        delete[] h_buff;
+    cudaIpcMemHandle_t handle;
+    CUDA_CHECK(cudaIpcGetMemHandle(&handle, d_buff));
+
+    std::vector<cudaIpcMemHandle_t> locals(world_size);
+    MPI_CHECK(MPI_Allgather(&handle, sizeof(cudaIpcMemHandle_t), MPI_BYTE, locals.data(), sizeof(cudaIpcMemHandle_t), MPI_BYTE, MPI_COMM_WORLD));
+
+    std::vector<float *> remotes(world_size, nullptr);
+    for (std::size_t rank = 0; rank < world_size; ++rank) {
+        if (rank == world_rank) continue;
+        CUDA_CHECK(cudaIpcOpenMemHandle(reinterpret_cast<void **>(&remotes[rank]), locals[rank], cudaIpcMemLazyEnablePeerAccess));
     }
 
-    // Initialize MCCL library
-    MCCL<float> mccl(world_rank, world_size);
+    cudaStream_t stream;
+    CUDA_CHECK(cudaStreamCreate(&stream));
 
-    // Perform broadcast operation using MCCL
-    mccl.Broadcast(d_buff, kN, kRootGpu);
+    if (world_rank == kRootGpu) {
+        std::vector<float> h_buff(kN);
+        InitVector<float>(h_buff.data(), kN);
+        CUDA_CHECK(cudaMemcpy(d_buff, h_buff.data(), kBytes, cudaMemcpyHostToDevice));
 
-    // Verify results
+        for (std::size_t dst = 0; dst < world_size; ++dst) {
+            if (dst == kRootGpu) continue;
+            CUDA_CHECK(cudaMemcpyPeerAsync(remotes[dst], dst, d_buff, kRootGpu, kBytes, stream));
+        }
+        CUDA_CHECK(cudaStreamSynchronize(stream));
+    }
+
+    MPI_CHECK(MPI_Barrier(MPI_COMM_WORLD));
+
     std::cout << "Broadcast completed on rank " << world_rank << ". Verifying results...";
     float *h_verify_data = new float[kN];
     CUDA_CHECK(cudaMemcpy(h_verify_data, d_buff, kBytes, cudaMemcpyDeviceToHost));
@@ -79,7 +91,7 @@ int main(int argc, char **argv) {
             h_root_data[i] = h_verify_data[i];
         }
     }
-    MPI_Bcast(h_root_data, kN, MPI_FLOAT, kRootGpu, MPI_COMM_WORLD);
+    MPI_CHECK(MPI_Bcast(h_root_data, kN, MPI_FLOAT, kRootGpu, MPI_COMM_WORLD));
 
     bool success = true;
     for (size_t i = 0; i < kN; i++) {
@@ -93,9 +105,13 @@ int main(int argc, char **argv) {
     delete[] h_verify_data;
     delete[] h_root_data;
 
-    // Cleanup
+    for (std::size_t rank = 0; rank < world_size; ++rank) {
+        if (remotes[rank] != nullptr) {
+            CUDA_CHECK(cudaIpcCloseMemHandle(remotes[rank]));
+        }
+    }
+    CUDA_CHECK(cudaStreamDestroy(stream));
     CUDA_CHECK(cudaFree(d_buff));
-    MPI_Finalize();
-
+    MPI_CHECK(MPI_Finalize());
     return 0;
 }
