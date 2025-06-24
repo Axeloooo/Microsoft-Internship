@@ -1,3 +1,5 @@
+#include <assert.h>  // required for assert macro in device/host code
+
 /**
  * @brief Naive implementation of single-precision matrix multiplication (SGEMM)
  *

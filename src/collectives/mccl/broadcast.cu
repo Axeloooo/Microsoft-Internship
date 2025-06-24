@@ -19,6 +19,7 @@
 
 #include "checker.cuh"
 #include "data.cuh"
+#include "mccl.cuh"
 
 constexpr std::size_t kN = 4194304;
 constexpr std::size_t kBytes = (kN * sizeof(float));
@@ -42,43 +43,23 @@ int main(int argc, char **argv) {
 
     CUDA_CHECK(cudaSetDevice(world_rank));
 
-    for (std::size_t i = 0; i < world_size; ++i) {
-        if (i != world_rank) {
-            CUDA_CHECK(cudaDeviceEnablePeerAccess(i, 0));
+    for (std::size_t rank = 0; rank < world_size; ++rank) {
+        if (rank != world_rank) {
+            CUDA_CHECK(cudaDeviceEnablePeerAccess(rank, 0));
         }
     }
 
     float *d_buff = nullptr;
     CUDA_CHECK(cudaMalloc(&d_buff, kBytes));
 
-    cudaIpcMemHandle_t handle;
-    CUDA_CHECK(cudaIpcGetMemHandle(&handle, d_buff));
-
-    std::vector<cudaIpcMemHandle_t> locals(world_size);
-    MPI_CHECK(MPI_Allgather(&handle, sizeof(cudaIpcMemHandle_t), MPI_BYTE, locals.data(), sizeof(cudaIpcMemHandle_t), MPI_BYTE, MPI_COMM_WORLD));
-
-    std::vector<float *> remotes(world_size, nullptr);
-    for (std::size_t rank = 0; rank < world_size; ++rank) {
-        if (rank != world_rank) {
-            CUDA_CHECK(cudaIpcOpenMemHandle(reinterpret_cast<void **>(&remotes[rank]), locals[rank], cudaIpcMemLazyEnablePeerAccess));
-        }
-    }
-
-    cudaStream_t stream;
-    CUDA_CHECK(cudaStreamCreate(&stream));
-
     if (world_rank == kRootGpu) {
-        std::vector<float> h_buff(kN);
-        InitVector<float>(h_buff.data(), kN);
-        CUDA_CHECK(cudaMemcpy(d_buff, h_buff.data(), kBytes, cudaMemcpyHostToDevice));
-
-        for (std::size_t dst = 0; dst < world_size; ++dst) {
-            if (dst != kRootGpu) {
-                CUDA_CHECK(cudaMemcpyPeerAsync(remotes[dst], dst, d_buff, kRootGpu, kBytes, stream));
-            }
-        }
-        CUDA_CHECK(cudaStreamSynchronize(stream));
+        std::vector<float> h(kN);
+        InitVector<float>(h.data(), kN);
+        CUDA_CHECK(cudaMemcpy(d_buff, h.data(), kBytes, cudaMemcpyHostToDevice));
     }
+
+    MCCL<float> mccl(world_rank, world_size);
+    mccl.Broadcast(d_buff, kN, kRootGpu);
 
     MPI_CHECK(MPI_Barrier(MPI_COMM_WORLD));
 
@@ -101,12 +82,6 @@ int main(int argc, char **argv) {
 
     std::cout << "Rank " << world_rank << " : " << (ok ? "PASS" : "FAIL") << std::endl;
 
-    for (std::size_t rank = 0; rank < world_size; ++rank) {
-        if (remotes[rank] != nullptr) {
-            CUDA_CHECK(cudaIpcCloseMemHandle(remotes[rank]));
-        }
-    }
-    CUDA_CHECK(cudaStreamDestroy(stream));
     CUDA_CHECK(cudaFree(d_buff));
     MPI_CHECK(MPI_Finalize());
     return 0;
