@@ -1,7 +1,7 @@
 /**
  * @file allreduce.cu
  * @author Axel Omar Sanchez Peralta (t-axels@microsoft.com)
- * @brief Example of AllReduce operation using MCCL library
+ * @brief AllReduce example using CUDA IPC and MPI
  * @version 0.1
  * @date 2025-06-13
  *
@@ -12,6 +12,8 @@
 #include <cuda_runtime.h>
 #include <mpi.h>
 
+#include <cmath>
+#include <cstddef>
 #include <iostream>
 #include <vector>
 
@@ -20,66 +22,56 @@
 #include "mccl.cuh"
 
 constexpr std::size_t kN = 4194304;
-constexpr std::size_t kBytes = (kN * sizeof(float));
+constexpr std::size_t kBytes = kN * sizeof(float);
 
 /**
- * @brief Main function to demonstrate AllReduce operation using MCCL library
+ * @brief Main function for the AllReduce example using CUDA IPC and MPI
  *
  * @param argc argument count
  * @param argv argument vector
  * @return int
  */
-int main(int argc, char **argv) {
-    MPI_Init(&argc, &argv);
+int main(int argc, char** argv) {
+    MPI_CHECK(MPI_Init(&argc, &argv));
 
-    int world_size;
-    MPI_Comm_size(MPI_COMM_WORLD, &world_size);
-
-    int world_rank;
-    MPI_Comm_rank(MPI_COMM_WORLD, &world_rank);
+    int world_size, world_rank;
+    MPI_CHECK(MPI_Comm_size(MPI_COMM_WORLD, &world_size));
+    MPI_CHECK(MPI_Comm_rank(MPI_COMM_WORLD, &world_rank));
 
     CUDA_CHECK(cudaSetDevice(world_rank));
-
-    for (int i = 0; i < world_size; ++i) {
-        if (i != world_rank) {
-            CUDA_CHECK(cudaDeviceEnablePeerAccess(i, 0));
+    for (std::size_t rank = 0; rank < world_size; ++rank) {
+        if (rank != world_rank) {
+            CUDA_CHECK(cudaDeviceEnablePeerAccess(rank, 0));
         }
     }
 
-    float *d_sendbuff = nullptr;
-    float *d_recvbuff = nullptr;
-    CUDA_CHECK(cudaMalloc(&d_sendbuff, kBytes));
-    CUDA_CHECK(cudaMalloc(&d_recvbuff, kBytes));
+    float *d_send = nullptr, *d_recv = nullptr;
+    CUDA_CHECK(cudaMalloc(&d_send, kBytes));
+    CUDA_CHECK(cudaMalloc(&d_recv, kBytes));
 
-    float *h_in = new float[kN];
-    InitVector<float>(h_in, kN);
-    CUDA_CHECK(cudaMemcpy(d_sendbuff, h_in, kBytes, cudaMemcpyHostToDevice));
+    std::vector<float> h_init(kN);
+    InitVector<float>(h_init.data(), kN);
+    CUDA_CHECK(cudaMemcpy(d_send, h_init.data(), kBytes, cudaMemcpyHostToDevice));
 
     MCCL<float> mccl(world_rank, world_size);
-    const Operation op = SUM;
-    mccl.AllReduce(d_sendbuff, d_recvbuff, kN, op);
+    mccl.AllReduce(d_send, d_recv, kN, Operation::SUM);
 
-    float *h_result = new float[kN];
-    CUDA_CHECK(cudaMemcpy(h_result, d_recvbuff, kBytes, cudaMemcpyDeviceToHost));
+    std::vector<float> h_ref(kN);
+    MPI_CHECK(MPI_Allreduce(h_init.data(), h_ref.data(), static_cast<int>(kN), MPI_FLOAT, MPI_SUM, MPI_COMM_WORLD));
 
-    float *h_expected = new float[kN];
-    MPI_Allreduce(h_in, h_expected, kN, MPI_FLOAT, MPI_SUM, MPI_COMM_WORLD);
+    std::vector<float> h_chk(kN);
+    CUDA_CHECK(cudaMemcpy(h_chk.data(), d_recv, kBytes, cudaMemcpyDeviceToHost));
 
-    bool success = true;
-    for (size_t i = 0; i < kN; i++) {
-        if (std::fabs(h_result[i] - h_expected[i]) > 1e-5f) {
-            success = false;
+    bool ok = true;
+    for (std::size_t i = 0; i < kN; ++i)
+        if (std::fabs(h_chk[i] - h_ref[i]) > 1e-5f) {
+            ok = false;
             break;
         }
-    }
-    std::cout << "Device " << world_rank << ": " << (success ? "PASS" : "FAIL") << std::endl;
+    std::cout << "Rank " << world_rank << " : " << (ok ? "PASS" : "FAIL") << std::endl;
 
-    delete[] h_in;
-    delete[] h_result;
-    delete[] h_expected;
-    CUDA_CHECK(cudaFree(d_sendbuff));
-    CUDA_CHECK(cudaFree(d_recvbuff));
-
-    MPI_Finalize();
+    CUDA_CHECK(cudaFree(d_send));
+    CUDA_CHECK(cudaFree(d_recv));
+    MPI_CHECK(MPI_Finalize());
     return 0;
 }

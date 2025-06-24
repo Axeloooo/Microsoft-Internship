@@ -35,6 +35,36 @@ class MCCL {
     int rank_;
     int size_;
     cudaStream_t stream_;
+    std::vector<cudaStream_t> streams_;
+
+    /**
+     * @brief Exchange IPC memory handles between GPUs
+     *
+     * @param buffer Pointer to the buffer containing data to exchange
+     * @param bytes Size of the buffer in bytes
+     * @param remote_handles Vector to store remote memory handles
+     * @param local_handles Vector to store local memory handles
+     */
+    void ExchangeIpc(const T *buffer, std::size_t bytes, std::vector<T *> &remote_handles, std::vector<cudaIpcMemHandle_t> &local_handles);
+
+    /**
+     * @brief Close remote handles for IPC memory
+     *
+     * @param remote_handles Vector of remote memory handles to close
+     */
+    void CloseRemoteHandles(std::vector<T *> &remote_handles);
+
+    /**
+     * @brief Perform reduction operation on two buffers and store the result in a third buffer
+     *
+     * @param a First input buffer
+     * @param b Second input buffer
+     * @param result Output buffer for the result
+     * @param n Number of elements in the buffers
+     * @param op Reduction operation to perform
+     * @param stream CUDA stream for asynchronous execution
+     */
+    void PerformReduction(const T *a, const T *b, T *result, const std::size_t &n, const Operation &op, const cudaStream_t &stream);
 
    public:
     /**
@@ -101,16 +131,30 @@ class MCCL {
     void ReduceScatter(const T *sendbuff, T *recvbuff, const std::size_t &count, const Operation &op);
 
     /**
-     * @brief Get number of GPUs
+     * @brief Get the Rank object
      *
-     * @return Number of available GPUs
+     * @return const std::size_t&
      */
-    const std::size_t &GetGpus() const;
+    const std::size_t &GetRank() const;
 
     /**
-     * @brief Get reference to CUDA streams vector
+     * @brief Get the Size object
      *
-     * @return Reference to streams vector
+     * @return const std::size_t&
+     */
+    const std::size_t &GetSize() const;
+
+    /**
+     * @brief Get the Stream object
+     *
+     * @return const cudaStream_t&
+     */
+    const cudaStream_t &GetStream() const;
+
+    /**
+     * @brief Get the Streams object
+     *
+     * @return const std::vector<cudaStream_t>&
      */
     const std::vector<cudaStream_t> &GetStreams() const;
 };

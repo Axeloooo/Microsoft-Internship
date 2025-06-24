@@ -10,6 +10,7 @@
  */
 
 #include <cuda_runtime.h>
+#include <mpi.h>
 
 #include <cassert>
 #include <cstddef>
@@ -26,7 +27,7 @@ constexpr std::size_t kBlockSize = 256;
  * @brief CUDA kernel for element-wise sum operation
  */
 template <typename T>
-__global__ void VectorSum(const T *a, const T *b, T *result, const std::size_t n) {
+__global__ void VectorSum(const T* a, const T* b, T* result, const std::size_t n) {
     const std::size_t idx = blockIdx.x * blockDim.x + threadIdx.x;
     if (idx < n) {
         result[idx] = a[idx] + b[idx];
@@ -37,7 +38,7 @@ __global__ void VectorSum(const T *a, const T *b, T *result, const std::size_t n
  * @brief CUDA kernel for element-wise product operation
  */
 template <typename T>
-__global__ void VectorProd(const T *a, const T *b, T *result, const std::size_t n) {
+__global__ void VectorProd(const T* a, const T* b, T* result, const std::size_t n) {
     const std::size_t idx = blockIdx.x * blockDim.x + threadIdx.x;
     if (idx < n) {
         result[idx] = a[idx] * b[idx];
@@ -48,7 +49,7 @@ __global__ void VectorProd(const T *a, const T *b, T *result, const std::size_t 
  * @brief CUDA kernel for element-wise minimum operation
  */
 template <typename T>
-__global__ void VectorMin(const T *a, const T *b, T *result, const std::size_t n) {
+__global__ void VectorMin(const T* a, const T* b, T* result, const std::size_t n) {
     const std::size_t idx = blockIdx.x * blockDim.x + threadIdx.x;
     if (idx < n) {
         result[idx] = (a[idx] < b[idx]) ? a[idx] : b[idx];
@@ -59,7 +60,7 @@ __global__ void VectorMin(const T *a, const T *b, T *result, const std::size_t n
  * @brief CUDA kernel for element-wise maximum operation
  */
 template <typename T>
-__global__ void VectorMax(const T *a, const T *b, T *result, const std::size_t n) {
+__global__ void VectorMax(const T* a, const T* b, T* result, const std::size_t n) {
     const std::size_t idx = blockIdx.x * blockDim.x + threadIdx.x;
     if (idx < n) {
         result[idx] = (a[idx] > b[idx]) ? a[idx] : b[idx];
@@ -70,7 +71,7 @@ __global__ void VectorMax(const T *a, const T *b, T *result, const std::size_t n
  * @brief CUDA kernel for scalar division (used for averaging)
  */
 template <typename T>
-__global__ void VectorDivideScalar(const T *a, const T divisor, T *result, const std::size_t n) {
+__global__ void VectorDivideScalar(const T* a, const T divisor, T* result, const std::size_t n) {
     const std::size_t idx = blockIdx.x * blockDim.x + threadIdx.x;
     if (idx < n) {
         result[idx] = a[idx] / divisor;
@@ -78,17 +79,33 @@ __global__ void VectorDivideScalar(const T *a, const T divisor, T *result, const
 }
 
 /**
- * @brief Helper function to perform reduction operations on GPU
+ * @brief Helper function to finalize average operation by dividing by GPU count
  *
- * @param a First input array
- * @param b Second input array
- * @param result Output array
+ * @param data Array to divide
  * @param n Number of elements
- * @param op Operation to perform
+ * @param gpu_count Number of GPUs (divisor)
  * @param stream CUDA stream for asynchronous execution
  */
 template <typename T>
-void PerformReduction(const T *a, const T *b, T *result, const std::size_t &n, const Operation &op, const cudaStream_t &stream) {
+void FinalizeAverage(T* data, const std::size_t& n, const std::size_t& gpu_count, const cudaStream_t& stream) {
+    const std::size_t grid_size = (n + kBlockSize - 1) / kBlockSize;
+    VectorDivideScalar<<<grid_size, kBlockSize, 0, stream>>>(data, static_cast<T>(gpu_count), data, n);
+    CUDA_CHECK(cudaGetLastError());
+}
+
+/**
+ * @brief Perform reduction operation on two vectors
+ *
+ * @tparam T Type of data to be used in collective operations
+ * @param a First input vector
+ * @param b Second input vector
+ * @param result Output vector to store the result of the reduction
+ * @param n Number of elements in the vectors
+ * @param op Reduction operation to perform (e.g., SUM, PROD, MIN, MAX, AVG)
+ * @param stream CUDA stream for asynchronous execution
+ */
+template <typename T>
+void MCCL<T>::PerformReduction(const T* a, const T* b, T* result, const std::size_t& n, const Operation& op, const cudaStream_t& stream) {
     const std::size_t grid_size = (n + kBlockSize - 1) / kBlockSize;
 
     switch (op) {
@@ -115,33 +132,63 @@ void PerformReduction(const T *a, const T *b, T *result, const std::size_t &n, c
 }
 
 /**
- * @brief Helper function to finalize average operation by dividing by GPU count
+ * @brief Close remote handles for IPC memory
  *
- * @param data Array to divide
- * @param n Number of elements
- * @param gpu_count Number of GPUs (divisor)
- * @param stream CUDA stream for asynchronous execution
+ * @tparam T Type of data in the remote handles
+ * @param remote_handles Vector of pointers to remote buffers
  */
 template <typename T>
-void FinalizeAverage(T *data, const std::size_t &n, const std::size_t &gpu_count, const cudaStream_t &stream) {
-    const std::size_t grid_size = (n + kBlockSize - 1) / kBlockSize;
-    VectorDivideScalar<<<grid_size, kBlockSize, 0, stream>>>(data, static_cast<T>(gpu_count), data, n);
-    CUDA_CHECK(cudaGetLastError());
+void MCCL<T>::CloseRemoteHandles(std::vector<T*>& remote_handles) {
+    for (std::size_t rank = 0; rank < size_; ++rank) {
+        if (remote_handles[rank] != nullptr) {
+            cudaIpcCloseMemHandle(remote_handles[rank]);
+        }
+    }
+}
+
+/**
+ * @brief Exchange IPC memory handles between GPUs
+ *
+ * @tparam T Type of data to exchange
+ * @param buffer Pointer to the local buffer to exchange
+ * @param bytes Size of the buffer in bytes
+ * @param remote_ptrs Vector of pointers to remote buffers
+ * @param handles Vector of IPC memory handles for local buffers
+ */
+template <typename T>
+void MCCL<T>::ExchangeIpc(const T* buffer, std::size_t bytes, std::vector<T*>& remote_handles, std::vector<cudaIpcMemHandle_t>& local_handles) {
+    local_handles.resize(size_);
+    remote_handles.assign(size_, nullptr);
+
+    cudaIpcMemHandle_t handle;
+    CUDA_CHECK(cudaIpcGetMemHandle(&handle, const_cast<T*>(buffer)));
+
+    MPI_CHECK(MPI_Allgather(&handle, sizeof(cudaIpcMemHandle_t), MPI_BYTE, local_handles.data(), sizeof(cudaIpcMemHandle_t), MPI_BYTE, MPI_COMM_WORLD));
+
+    for (std::size_t rank = 0; rank < size_; ++rank) {
+        if (rank != rank_) {
+            CUDA_CHECK(cudaIpcOpenMemHandle(reinterpret_cast<void**>(&remote_handles[rank]), local_handles[rank], cudaIpcMemLazyEnablePeerAccess));
+        }
+    }
 }
 
 /**
  * @brief Construct a new MCCL<T>::MCCL object
  *
- * @param gpus Number of GPUs available for collective operations
+ * @tparam T Type of data to be used in collective operations
+ * @param rank The rank of the current process (0-indexed)
+ * @param size The total number of processes in the collective operation
  */
 template <typename T>
 MCCL<T>::MCCL(int rank, int size) : rank_(rank), size_(size) {
     CUDA_CHECK(cudaStreamCreate(&stream_));
+    streams_.push_back(stream_);
 }
 
 /**
  * @brief Destroy the MCCL<T>::MCCL object
  *
+ * @tparam T Type of data to be used in collective operations
  */
 template <typename T>
 MCCL<T>::~MCCL() {
@@ -149,127 +196,207 @@ MCCL<T>::~MCCL() {
 }
 
 /**
- * @brief All-reduce operation using a ring-based algorithm
+ * @brief Broadcast operation: distribute data from root to all GPUs
  *
- * @param sendbuff Input buffer
- * @param recvbuff Output buffer
- * @param count Number of elements
- * @param op Reduction operation
+ * @tparam T Type of data to be used in collective operations
+ * @param buffer Buffer for the operation. This buffer will be filled with data from the root GPU and distributed to all other GPUs.
+ * @param count Number of elements in the buffer to be broadcasted
+ * @param root Source GPU ID (0-indexed) from which the data will be broadcasted
  */
 template <typename T>
-void MCCL<T>::AllReduce(const T *sendbuff, T *recvbuff, const std::size_t &count, const Operation &op) {
-    const int root = 0;
-    T *reduce_buff = nullptr;
-    if (rank_ == root) {
-        CUDA_CHECK(cudaMalloc(&reduce_buff, count * sizeof(T)));
-    } else {
-        reduce_buff = recvbuff;
-    }
+void MCCL<T>::Broadcast(T* buffer, const std::size_t& count, const std::size_t& root) {
+    const std::size_t bytes = count * sizeof(T);
+    std::vector<T*> remote_handles;
+    std::vector<cudaIpcMemHandle_t> local_handles;
+    ExchangeIpc(buffer, bytes, remote_handles, local_handles);
 
-    Reduce(sendbuff, reduce_buff, count, root, op);
-
-    Broadcast(reduce_buff, count, root);
-
-    if (reduce_buff != recvbuff) {
-        CUDA_CHECK(cudaMemcpyAsync(recvbuff, reduce_buff, count * sizeof(T), cudaMemcpyDeviceToDevice, stream_));
-    }
-
-    if (rank_ == root) {
-        CUDA_CHECK(cudaFree(reduce_buff));
-    }
-    CUDA_CHECK(cudaStreamSynchronize(stream_));
-}
-
-/**
- * @brief Broadcast operation using a ring-based algorithm
- *
- * @param buffer Buffer for the operation
- * @param count Number of elements
- * @param root Source GPU ID
- */
-template <typename T>
-void MCCL<T>::Broadcast(T *buffer, const std::size_t &count, const std::size_t &root) {
-    if (rank_ == root) {
-        for (std::size_t i = 0; i < size_; ++i) {
-            if (i != rank_) {
-                CUDA_CHECK(cudaMemcpyPeerAsync(buffer, i, buffer, rank_, count * sizeof(T), stream_));
+    if (rank_ == static_cast<int>(root)) {
+        for (std::size_t dst = 0; dst < size_; ++dst) {
+            if (dst != root) {
+                CUDA_CHECK(cudaMemcpyPeerAsync(remote_handles[dst], dst, buffer, root, bytes, stream_));
             }
         }
+        CUDA_CHECK(cudaStreamSynchronize(stream_));
     }
-    CUDA_CHECK(cudaStreamSynchronize(stream_));
+    MPI_CHECK(MPI_Barrier(MPI_COMM_WORLD));
+
+    CloseRemoteHandles(remote_handles);
 }
 
 /**
- * @brief Reduce operation using a ring-based algorithm
+ * @brief Reduce operation: reduce data from all GPUs to root
  *
- * @param sendbuff Input buffer
- * @param recvbuff Output buffer
- * @param count Number of elements
- * @param root Destination GPU ID
- * @param op Reduction operation
+ * @tparam T Type of data to be used in collective operations
+ * @param sendbuff Input buffers on each GPU (each GPU has its own data to send)
+ * @param recvbuff Output buffer (only root's buffer receives the result of the reduction)
+ * @param count Number of elements in each input buffer (each GPU has the same number of elements)
+ * @param root Destination GPU ID (0-indexed) where the reduced result will be stored
+ * @param op Reduction operation to perform (e.g., SUM, PROD, MIN, MAX, AVG)
  */
 template <typename T>
-void MCCL<T>::Reduce(const T *sendbuff, T *recvbuff, const std::size_t &count, const std::size_t &root, const Operation &op) {
-    if (rank_ == root) {
-        CUDA_CHECK(cudaMemcpyAsync(recvbuff, sendbuff, count * sizeof(T), cudaMemcpyDeviceToDevice, stream_));
-        T *temp_buff;
-        CUDA_CHECK(cudaMalloc(&temp_buff, count * sizeof(T)));
-        for (std::size_t i = 0; i < size_; i++) {
-            if (i != root) {
-                CUDA_CHECK(cudaMemcpyPeerAsync(temp_buff, rank_, sendbuff, i, count * sizeof(T), stream_));
-                PerformReduction(recvbuff, temp_buff, recvbuff, count, op, stream_);
+void MCCL<T>::Reduce(const T* sendbuff, T* recvbuff, const std::size_t& count, const std::size_t& root, const Operation& op) {
+    const std::size_t bytes = count * sizeof(T);
+    std::vector<T*> remote_handles;
+    std::vector<cudaIpcMemHandle_t> local_handles;
+    ExchangeIpc(sendbuff, bytes, remote_handles, local_handles);
+
+    if (rank_ == static_cast<int>(root)) {
+        CUDA_CHECK(cudaMemcpyAsync(recvbuff, sendbuff, bytes, cudaMemcpyDeviceToDevice, stream_));
+
+        T* tmp = nullptr;
+        CUDA_CHECK(cudaMalloc(&tmp, bytes));
+
+        for (int src = 0; src < size_; ++src) {
+            if (src != root) {
+                CUDA_CHECK(cudaMemcpyPeerAsync(tmp, root, remote_handles[src], src, bytes, stream_));
+                PerformReduction(recvbuff, tmp, recvbuff, count, op, stream_);
             }
         }
-        CUDA_CHECK(cudaFree(temp_buff));
+        CUDA_CHECK(cudaStreamSynchronize(stream_));
+
+        if (op == AVG) {
+            FinalizeAverage(recvbuff, count, size_, stream_);
+            CUDA_CHECK(cudaStreamSynchronize(stream_));
+        }
+
+        CUDA_CHECK(cudaFree(tmp));
     }
-    CUDA_CHECK(cudaStreamSynchronize(stream_));
+    MPI_CHECK(MPI_Barrier(MPI_COMM_WORLD));
+    CloseRemoteHandles(remote_handles);
 }
 
 /**
- * @brief All-gather operation using a ring-based algorithm
+ * @brief Reduce-Scatter operation: reduce and scatter chunks to GPUs
  *
- * @param sendbuff Input buffer
- * @param recvbuff Output buffer
- * @param count Number of elements
+ * @tparam T Type of data to be used in collective operations
+ * @param sendbuff Input buffers on each GPU (each GPU has its own data to send, total size is count * size_)
+ * @param recvbuff Output buffers on each GPU (each GPU receives a chunk of the reduced data, size is count)
+ * @param count Number of elements in each output buffer (each GPU receives the same number of elements)
+ * @param op Reduction operation to perform (e.g., SUM, PROD, MIN, MAX, AVG)
  */
 template <typename T>
-void MCCL<T>::AllGather(const T *sendbuff, T *recvbuff, const std::size_t &count) {
-    for (std::size_t i = 0; i < size_; i++) {
-        if (i == rank_) {
-            CUDA_CHECK(cudaMemcpyAsync(recvbuff + i * count, sendbuff, count * sizeof(T), cudaMemcpyDeviceToDevice, stream_));
-        } else {
-            CUDA_CHECK(cudaMemcpyPeerAsync(recvbuff + i * count, rank_, sendbuff, i, count * sizeof(T), stream_));
+void MCCL<T>::ReduceScatter(const T* sendbuff, T* recvbuff, const std::size_t& count, const Operation& op) {
+    const std::size_t bytes_total = count * size_ * sizeof(T);
+    const std::size_t bytes_slice = count * sizeof(T);
+    const std::size_t slice_off = static_cast<std::size_t>(rank_) * count;
+
+    std::vector<T*> remote_handles;
+    std::vector<cudaIpcMemHandle_t> local_handles;
+    ExchangeIpc(sendbuff, bytes_total, remote_handles, local_handles);
+
+    CUDA_CHECK(cudaMemcpyAsync(recvbuff, sendbuff + slice_off, bytes_slice, cudaMemcpyDeviceToDevice, stream_));
+
+    T* tmp = nullptr;
+    CUDA_CHECK(cudaMalloc(&tmp, bytes_slice));
+
+    for (std::size_t src = 0; src < size_; ++src) {
+        if (src != rank_) {
+            const T* remote_slice = remote_handles[src] + slice_off;
+            CUDA_CHECK(cudaMemcpyPeerAsync(tmp, rank_, remote_slice, src, bytes_slice, stream_));
+            PerformReduction(recvbuff, tmp, recvbuff, count, op, stream_);
         }
     }
     CUDA_CHECK(cudaStreamSynchronize(stream_));
+    CUDA_CHECK(cudaFree(tmp));
+
+    if (op == AVG) {
+        FinalizeAverage(recvbuff, count, size_, stream_);
+        CUDA_CHECK(cudaStreamSynchronize(stream_));
+    }
+
+    MPI_CHECK(MPI_Barrier(MPI_COMM_WORLD));
+    CloseRemoteHandles(remote_handles);
 }
 
 /**
- * @brief Reduce-scatter operation using a ring-based algorithm
+ * @brief All-gather operation: gather data from all GPUs to all GPUs
  *
- * @param sendbuff Input buffer
- * @param recvbuff Output buffer
- * @param count Number of elements
- * @param op Reduction operation
+ * @tparam T Type of data to be used in collective operations
+ * @param sendbuff Input buffers on each GPU (each GPU has its own data to send, size is count)
+ * @param recvbuff Output buffers on each GPU (each GPU receives data from all other GPUs, size is count * size_)
+ * @param count Number of elements in each input buffer (each GPU has the same number of elements)
  */
 template <typename T>
-void MCCL<T>::ReduceScatter(const T *sendbuff, T *recvbuff, const std::size_t &recvcount, const Operation &op) {
-    const T *my_chunk_in_sendbuff = sendbuff + rank_ * recvcount;
-    CUDA_CHECK(cudaMemcpyAsync(recvbuff, my_chunk_in_sendbuff, recvcount * sizeof(T), cudaMemcpyDeviceToDevice, stream_));
+void MCCL<T>::AllGather(const T* sendbuff, T* recvbuff, const std::size_t& count) {
+    const std::size_t bytes = count * sizeof(T);
+    const std::size_t off_bytes = static_cast<std::size_t>(rank_) * bytes;
 
-    T *temp_buff;
-    CUDA_CHECK(cudaMalloc(&temp_buff, recvcount * sizeof(T)));
+    std::vector<T*> remote_handles;
+    std::vector<cudaIpcMemHandle_t> local_handles;
+    ExchangeIpc(recvbuff, bytes * size_, remote_handles, local_handles);
 
-    for (std::size_t i = 0; i < size_; i++) {
-        if (i != rank_) {
-            const T *remote_chunk = sendbuff + rank_ * recvcount;
-            CUDA_CHECK(cudaMemcpyPeerAsync(temp_buff, rank_, remote_chunk, i, recvcount * sizeof(T), stream_));
-            PerformReduction(recvbuff, temp_buff, recvbuff, recvcount, op, stream_);
+    CUDA_CHECK(cudaMemcpyAsync(reinterpret_cast<char*>(recvbuff) + off_bytes, sendbuff, bytes, cudaMemcpyDeviceToDevice, stream_));
+
+    for (std::size_t dst = 0; dst < size_; ++dst) {
+        if (dst != rank_) {
+            CUDA_CHECK(cudaMemcpyPeerAsync(reinterpret_cast<char*>(remote_handles[dst]) + off_bytes, dst, sendbuff, rank_, bytes, stream_));
         }
     }
-
-    CUDA_CHECK(cudaFree(temp_buff));
     CUDA_CHECK(cudaStreamSynchronize(stream_));
+
+    MPI_CHECK(MPI_Barrier(MPI_COMM_WORLD));
+
+    CloseRemoteHandles(remote_handles);
+}
+
+/**
+ * @brief AllReduce operation: reduce and broadcast result to all GPUs
+ *
+ * @tparam T Type of data to be used in collective operations
+ * @param sendbuff Input buffers on each GPU (each GPU has its own data to send, size is count)
+ * @param recvbuff Output buffers on each GPU (each GPU receives the reduced result, size is count)
+ * @param count Number of elements in each input buffer (each GPU has the same number of elements)
+ * @param op Reduction operation to perform (e.g., SUM, PROD, MIN, MAX, AVG)
+ */
+template <typename T>
+void MCCL<T>::AllReduce(const T* sendbuff, T* recvbuff, const std::size_t& count, const Operation& op) {
+    const std::size_t root = 0;
+    Reduce(sendbuff, recvbuff, count, root, op);
+    Broadcast(recvbuff, count, root);
+}
+
+/**
+ * @brief Get the rank of the current process in the collective operation
+ *
+ * @tparam T Type of data to be used in collective operations
+ * @return const std::size_t&
+ */
+template <typename T>
+const std::size_t& MCCL<T>::GetRank() const {
+    return reinterpret_cast<const std::size_t&>(rank_);
+}
+
+/**
+ * @brief Get the size of the collective operation
+ *
+ * @tparam T Type of data to be used in collective operations
+ * @return const std::size_t&
+ */
+template <typename T>
+const std::size_t& MCCL<T>::GetSize() const {
+    return reinterpret_cast<const std::size_t&>(size_);
+}
+
+/**
+ * @brief Get the CUDA stream used for operations
+ *
+ * @tparam T Type of data to be used in collective operations
+ * @return const cudaStream_t&
+ */
+template <typename T>
+const cudaStream_t& MCCL<T>::GetStream() const {
+    return stream_;
+}
+
+/**
+ * @brief Get the CUDA stream used for operations
+ *
+ * @tparam T Type of data to be used in collective operations
+ * @return const std::vector<cudaStream_t>&
+ */
+template <typename T>
+const std::vector<cudaStream_t>& MCCL<T>::GetStreams() const {
+    return streams_;
 }
 
 template class MCCL<float>;
