@@ -4,7 +4,7 @@
 
 # Compiler and flags
 NVCC        := nvcc	
-NVCCFLAGS   := -I include -arch=sm_90
+NVCCFLAGS   := -I include -arch=sm_90 -O3
 MPICXX      := mpic++
 MPIRUN      := mpirun
 CUBLAS_LIBS := -lcublas
