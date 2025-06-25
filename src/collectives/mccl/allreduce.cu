@@ -11,6 +11,7 @@
 
 #include <cuda_runtime.h>
 #include <mpi.h>
+#include <nccl.h>
 
 #include <cmath>
 #include <cstddef>
@@ -20,6 +21,7 @@
 #include "checker.cuh"
 #include "data.cuh"
 #include "mccl.cuh"
+#include "timer.cuh"
 
 constexpr std::size_t kN = 4194304;
 constexpr std::size_t kBytes = kN * sizeof(float);
@@ -53,22 +55,69 @@ int main(int argc, char** argv) {
     InitVector<float>(h_init.data(), kN);
     CUDA_CHECK(cudaMemcpy(d_send, h_init.data(), kBytes, cudaMemcpyHostToDevice));
 
+    // NCCL init --------------------------------------------------------------
+    ncclUniqueId nccl_id;
+    if (world_rank == 0) {
+        NCCL_CHECK(ncclGetUniqueId(&nccl_id));
+    }
+    MPI_CHECK(MPI_Bcast(&nccl_id, sizeof(nccl_id), MPI_BYTE, 0, MPI_COMM_WORLD));
+
+    ncclComm_t nccl_comm;
+    NCCL_CHECK(ncclCommInitRank(&nccl_comm, world_size, nccl_id, world_rank));
+    cudaStream_t nccl_stream;
+    CUDA_CHECK(cudaStreamCreate(&nccl_stream));
+    // -----------------------------------------------------------------------
+
+    float* d_send_nccl = nullptr;
+    float* d_recv_nccl = nullptr;
+    CUDA_CHECK(cudaMalloc(&d_send_nccl, kBytes));
+    CUDA_CHECK(cudaMalloc(&d_recv_nccl, kBytes));
+    CUDA_CHECK(cudaMemcpy(d_send_nccl, h_init.data(), kBytes, cudaMemcpyHostToDevice));
+
+    // ------------------ MCCL -----------------------------------------------
     MCCL<float> mccl(world_rank, world_size);
+
     mccl.AllReduce(d_send, d_recv, kN, Operation::SUM);
+    CUDA_CHECK(cudaDeviceSynchronize());
+    MPI_CHECK(MPI_Barrier(MPI_COMM_WORLD));
+
+    CudaTimer mccl_timer("MCCL AllReduce", kBytes);
+    MPI_CHECK(MPI_Barrier(MPI_COMM_WORLD));
+    mccl_timer.Start();
+    mccl.AllReduce(d_send, d_recv, kN, Operation::SUM);
+    CUDA_CHECK(cudaDeviceSynchronize());
+    MPI_CHECK(MPI_Barrier(MPI_COMM_WORLD));
+    mccl_timer.Stop();
+    if (world_rank == 0) {
+        mccl_timer.Print();
+    }
 
     std::vector<float> h_ref(kN);
-    MPI_CHECK(MPI_Allreduce(h_init.data(), h_ref.data(), static_cast<int>(kN), MPI_FLOAT, MPI_SUM, MPI_COMM_WORLD));
+    MPI_CHECK(MPI_Allreduce(h_init.data(), h_ref.data(), kN, MPI_FLOAT, MPI_SUM, MPI_COMM_WORLD));
+    VerifyCollective("MCCL", d_recv, h_ref, world_rank, kN);
 
-    std::vector<float> h_chk(kN);
-    CUDA_CHECK(cudaMemcpy(h_chk.data(), d_recv, kBytes, cudaMemcpyDeviceToHost));
+    // ------------------ NCCL -----------------------------------------------
+    NCCL_CHECK(ncclAllReduce(d_send_nccl, d_recv_nccl, kN, ncclFloat32, ncclSum, nccl_comm, nccl_stream));
+    CUDA_CHECK(cudaStreamSynchronize(nccl_stream));
+    MPI_CHECK(MPI_Barrier(MPI_COMM_WORLD));
 
-    bool ok = true;
-    for (std::size_t i = 0; i < kN; ++i)
-        if (std::fabs(h_chk[i] - h_ref[i]) > 1e-5f) {
-            ok = false;
-            break;
-        }
-    std::cout << "Rank " << world_rank << " : " << (ok ? "PASS" : "FAIL") << std::endl;
+    CudaTimer nccl_timer("NCCL AllReduce", kBytes);
+    MPI_CHECK(MPI_Barrier(MPI_COMM_WORLD));
+    nccl_timer.Start();
+    NCCL_CHECK(ncclAllReduce(d_send_nccl, d_recv_nccl, kN, ncclFloat32, ncclSum, nccl_comm, nccl_stream));
+    CUDA_CHECK(cudaStreamSynchronize(nccl_stream));
+    MPI_CHECK(MPI_Barrier(MPI_COMM_WORLD));
+    nccl_timer.Stop();
+
+    if (world_rank == 0) {
+        nccl_timer.Print();
+    }
+    VerifyCollective("NCCL", d_recv_nccl, h_ref, world_rank, kN);
+
+    CUDA_CHECK(cudaFree(d_send_nccl));
+    CUDA_CHECK(cudaFree(d_recv_nccl));
+    NCCL_CHECK(ncclCommDestroy(nccl_comm));
+    CUDA_CHECK(cudaStreamDestroy(nccl_stream));
 
     CUDA_CHECK(cudaFree(d_send));
     CUDA_CHECK(cudaFree(d_recv));

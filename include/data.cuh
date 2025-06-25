@@ -12,6 +12,10 @@
 #ifndef DATA_CUH
 #define DATA_CUH
 
+#include <cstddef>
+#include <string>
+#include <vector>
+
 /**
  * @brief Utility functions for initializing and verifying vectors and matrices
  *
@@ -55,5 +59,18 @@ void VerifyVector(const T *h_vector, const T *d_vector, const std::size_t &n);
  */
 template <typename T>
 void VerifyMatrix(const T *h_matrix, const T *d_matrix, const std::size_t &m, const std::size_t &n);
+
+/**
+ * @brief Verify the results of a collective operation
+ *
+ * @tparam T Data type for the collective operation (e.g., float, int)
+ * @param label Label for the collective operation (e.g., "AllReduce", "Broadcast")
+ * @param d_buff Pointer to the device output buffer
+ * @param h_buff Reference host buffer containing expected results
+ * @param rank Rank of the process in the collective operation
+ * @param n Number of elements in the buffer
+ */
+template <typename T>
+void VerifyCollective(const std::string &label, const T *d_buff, const std::vector<T> &h_buff, int rank, std::size_t n);
 
 #endif

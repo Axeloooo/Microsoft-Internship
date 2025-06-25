@@ -61,7 +61,7 @@
  * @brief Macro to check NCCL function calls for errors.
  *
  */
-#define CHECK_NCCL(cmd)                                                                                                               \
+#define NCCL_CHECK(cmd)                                                                                                               \
     do {                                                                                                                              \
         ncclResult_t res = cmd;                                                                                                       \
         if (res != ncclSuccess) {                                                                                                     \
