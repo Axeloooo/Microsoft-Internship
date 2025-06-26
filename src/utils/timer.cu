@@ -15,8 +15,8 @@
 #include <iostream>
 #include <string>
 
-#include "checker.cuh"
-#include "timer.cuh"
+#include "utils/checker.cuh"
+#include "utils/timer.cuh"
 
 /**
  * @brief Construct a new Cuda Timer:: Cuda Timer object
@@ -24,12 +24,12 @@
  * @param label A label for the timer, useful for debugging and logging.
  * @param bytes The number of bytes processed during the operation.
  */
-CudaTimer::CudaTimer(const std::string &label, const std::size_t &bytes) : label_(label), bytes_(bytes), flops_(0.0), elapsed_ms_(0.0f) {
+CudaTimer::CudaTimer(const std::string &label, const unsigned int &bytes) : label_(label), bytes_(bytes), flops_(0.0), elapsed_ms_(0.0f) {
     CUDA_CHECK(cudaEventCreate(&start_event_));
     CUDA_CHECK(cudaEventCreate(&stop_event_));
 }
 
-CudaTimer::CudaTimer(const std::string &label, const std::size_t &bytes, const double &flops) : label_(label), bytes_(bytes), flops_(flops), elapsed_ms_(0.0f) {
+CudaTimer::CudaTimer(const std::string &label, const unsigned int &bytes, const double &flops) : label_(label), bytes_(bytes), flops_(flops), elapsed_ms_(0.0f) {
     CUDA_CHECK(cudaEventCreate(&start_event_));
     CUDA_CHECK(cudaEventCreate(&stop_event_));
 }
