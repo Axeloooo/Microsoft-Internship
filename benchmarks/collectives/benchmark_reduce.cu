@@ -1,7 +1,7 @@
 /**
- * @file reduce.cu
+ * @file benchmark_reduce.cu
  * @author Axel Omar Sanchez Peralta (t-axels@microsoft.com)
- * @brief Reduce example using MPI and CUDA IPC
+ * @brief A benchmark for the Reduce operation using MCCL and NCCL.
  * @version 0.1
  * @date 2025-06-13
  *

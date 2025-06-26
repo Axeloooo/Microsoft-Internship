@@ -1,7 +1,7 @@
 /**
- * @file broadcast.cu
+ * @file benchmark_broadcast.cu
  * @author Axel Omar Sanchez Peralta (t-axels@microsoft.com)
- * @brief Broadcast example using CUDA IPC and MPI
+ * @brief A benchmark for the Broadcast operation using MCCL and NCCL.
  * @version 0.1
  * @date 2025-06-13
  *

@@ -1,18 +1,29 @@
-#include <assert.h>  // required for assert macro in device/host code
+/**
+ * @file gemm.cu
+ * @author Axel Omar Sanchez Peralta (t-axels@microsoft.com)
+ * @brief General Matrix Multiplication (GEMM) implementations in CUDA.
+ * @version 0.1
+ * @date 2025-06-26
+ *
+ * @copyright Copyright (c) 2025
+ *
+ */
+
+#include <assert.h>
 
 #include "blas/gemm.cuh"
 
 /**
- * @brief Naive implementation of single-precision matrix multiplication (SGEMM)
+ * @brief Naive implementation of GEMM (General Matrix Multiplication).
  *
- * @param M Number of rows in matrix A and C
- * @param N Number of columns in matrix B and C
- * @param K Number of columns in matrix A and rows in matrix B
- * @param alpha Scalar multiplier for the product of A and B
- * @param A Matrix A, which is of size MxK
- * @param B Matrix B, which is of size KxN
- * @param beta  Scalar multiplier for the existing values in C
- * @param  C Matrix C, which is the result of the multiplication
+ * @param M Number of rows in matrix A and C.
+ * @param N Number of columns in matrix B and C.
+ * @param K Number of columns in matrix A and rows in matrix B.
+ * @param alpha Scalar multiplier for the product of A and B.
+ * @param A Pointer to matrix A in row-major order.
+ * @param B Pointer to matrix B in row-major order.
+ * @param beta Scalar multiplier for matrix C.
+ * @param C Pointer to matrix C in row-major order, which will be updated with the result.
  * @return __global__
  */
 __global__ void NaiveGemm(int M, int N, int K, float alpha, const float *A, const float *B, float beta, float *C) {
@@ -28,6 +39,20 @@ __global__ void NaiveGemm(int M, int N, int K, float alpha, const float *A, cons
     }
 }
 
+/**
+ * @brief Optimized GEMM implementation using general memory coalescing.
+ *
+ * @tparam BLOCK_SIZE Size of the block (number of threads per block).
+ * @param M Number of rows in matrix A and C.
+ * @param N Number of columns in matrix B and C.
+ * @param K Number of columns in matrix A and rows in matrix B.
+ * @param alpha Scalar multiplier for the product of A and B.
+ * @param A Pointer to matrix A in row-major order.
+ * @param B Pointer to matrix B in row-major order.
+ * @param beta Scalar multiplier for matrix C.
+ * @param C Pointer to matrix C in row-major order, which will be updated with the result.
+ * @return __global__
+ */
 template <unsigned int BLOCK_SIZE>
 __global__ void CoalescingGemm(int M, int N, int K, float alpha, const float *A, const float *B, float beta, float *C) {
     const int cRow = blockIdx.x * BLOCK_SIZE + (threadIdx.x / BLOCK_SIZE);
@@ -42,6 +67,20 @@ __global__ void CoalescingGemm(int M, int N, int K, float alpha, const float *A,
     }
 }
 
+/**
+ * @brief Optimized GEMM implementation using cache optimization techniques.
+ *
+ * @tparam BLOCK_SIZE Size of the block (number of threads per block).
+ * @param M Number of rows in matrix A and C.
+ * @param N Number of columns in matrix B and C.
+ * @param K Number of columns in matrix A and rows in matrix B.
+ * @param alpha Scalar multiplier for the product of A and B.
+ * @param A Pointer to matrix A in row-major order.
+ * @param B Pointer to matrix B in row-major order.
+ * @param beta Scalar multiplier for matrix C.
+ * @param C Pointer to matrix C in row-major order, which will be updated with the result.
+ * @return __global__
+ */
 template <unsigned int BLOCK_SIZE>
 __global__ void CacheGemm(int M, int N, int K, float alpha, const float *A, const float *B, float beta, float *C) {
     // the output block that we want to compute in this threadblock
@@ -86,6 +125,23 @@ __global__ void CacheGemm(int M, int N, int K, float alpha, const float *A, cons
     C[threadRow * N + threadCol] = alpha * tmp + beta * C[threadRow * N + threadCol];
 }
 
+/**
+ * @brief Tiling 1D GEMM implementation using shared memory for better performance.
+ *
+ * @tparam BM Block size for matrix A.
+ * @tparam BN Block size for matrix B.
+ * @tparam BK Block size for matrix K.
+ * @tparam TM Thread size for matrix multiplication.
+ * @param M Number of rows in matrix A and C.
+ * @param N Number of columns in matrix B and C.
+ * @param K Number of columns in matrix A and rows in matrix B.
+ * @param alpha Scalar multiplier for the product of A and B.
+ * @param A Pointer to matrix A in row-major order.
+ * @param B Pointer to matrix B in row-major order.
+ * @param beta Scalar multiplier for matrix C.
+ * @param C Pointer to matrix C in row-major order, which will be updated with the result.
+ * @return __global__
+ */
 template <unsigned int BM, unsigned int BN, unsigned int BK, unsigned int TM>
 __global__ void Tiling1DGemm(int M, int N, int K, float alpha, const float *A, const float *B, float beta, float *C) {
     // If we flip x and y here we get ~30% less performance for large matrices.

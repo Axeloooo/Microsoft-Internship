@@ -1,10 +1,21 @@
+/**
+ * @file reduction.cu
+ * @author Axel omar Sanchez Peralta (t-axels@microsoft.com)
+ * @brief CUDA kernels for various reduction algorithms.
+ * @version 0.1
+ * @date 2025-06-26
+ *
+ * @copyright Copyright (c) 2025
+ *
+ */
+
 #include "blas/reduction.cuh"
 
 /**
- * @brief Naive reduction kernel that sums up elements in a block of threads
+ * @brief Naive reduction kernel that sums all elements in the input array.
  *
- * @param g_in_data Vector of integers to be reduced
- * @param g_out_data Pointer to the output integer where the result will be stored
+ * @param g_in_data Pointer to the input data in global memory.
+ * @param g_out_data Pointer to the output data in global memory, where the result will be stored.
  * @return __global__
  */
 __global__ void naiveReduce(int *g_in_data, int *g_out_data) {
@@ -26,6 +37,13 @@ __global__ void naiveReduce(int *g_in_data, int *g_out_data) {
     }
 }
 
+/**
+ * @brief Interleaved addressing reduction kernel that sums elements in the input array using interleaved addressing.
+ *
+ * @param g_in_data Pointer to the input data in global memory.
+ * @param g_out_data Pointer to the output data in global memory, where the result will be stored.
+ * @return __global__
+ */
 __global__ void interleaveAddressingReduce(int *g_in_data, int *g_out_data) {
     extern __shared__ int sdata[];
 
@@ -46,6 +64,13 @@ __global__ void interleaveAddressingReduce(int *g_in_data, int *g_out_data) {
     }
 }
 
+/**
+ * @brief Sequence addressing reduction kernel that sums elements in the input array using sequence addressing.
+ *
+ * @param g_in_data Pointer to the input data in global memory.
+ * @param g_out_data Pointer to the output data in global memory, where the result will be stored.
+ * @return __global__
+ */
 __global__ void sequenceAddressingReduce(int *g_in_data, int *g_out_data) {
     extern __shared__ int sdata[];
 
@@ -66,6 +91,13 @@ __global__ void sequenceAddressingReduce(int *g_in_data, int *g_out_data) {
     }
 }
 
+/**
+ * @brief Reduction kernel that performs a reduction during the loading phase.
+ *
+ * @param g_in_data Pointer to the input data in global memory.
+ * @param g_out_data Pointer to the output data in global memory, where the result will be stored.
+ * @return __global__
+ */
 __global__ void addDuringLoadReduce(int *g_in_data, int *g_out_data) {
     extern __shared__ int sdata[];
 
@@ -86,6 +118,13 @@ __global__ void addDuringLoadReduce(int *g_in_data, int *g_out_data) {
     }
 }
 
+/**
+ * @brief Warp-level reduction function that reduces data within a warp.
+ *
+ * @param sdata Pointer to shared memory used for reduction.
+ * @param tid Thread ID within the warp.
+ * @return __device__
+ */
 __device__ void warpReduce(volatile int *sdata, int tid) {
     sdata[tid] += sdata[tid + 32];
     sdata[tid] += sdata[tid + 16];
@@ -95,6 +134,13 @@ __device__ void warpReduce(volatile int *sdata, int tid) {
     sdata[tid] += sdata[tid + 1];
 }
 
+/**
+ * @brief Unroll last warp reduction kernel that performs a reduction on the last warp of threads.
+ *
+ * @param g_in_data Pointer to the input data in global memory.
+ * @param g_out_data Pointer to the output data in global memory, where the result will be stored.
+ * @return __global__
+ */
 __global__ void unrollLastWarpReduce(int *g_in_data, int *g_out_data) {
     extern __shared__ int sdata[];
 
@@ -120,6 +166,14 @@ __global__ void unrollLastWarpReduce(int *g_in_data, int *g_out_data) {
     }
 }
 
+/**
+ * @brief Template for warp-level reduction in shared memory.
+ *
+ * @tparam BLOCK_SIZE Size of the block (number of threads per block).
+ * @param sdata Pointer to shared memory used for reduction.
+ * @param tid Thread ID within the block.
+ * @return __device__
+ */
 template <unsigned int BLOCK_SIZE>
 __device__ void warpTemplateReduce(volatile int *sdata, unsigned int tid) {
     if (BLOCK_SIZE >= 64) sdata[tid] += sdata[tid + 32];
@@ -130,6 +184,14 @@ __device__ void warpTemplateReduce(volatile int *sdata, unsigned int tid) {
     if (BLOCK_SIZE >= 2) sdata[tid] += sdata[tid + 1];
 }
 
+/**
+ * @brief Completely unroll reduction kernel that performs a reduction by completely unrolling the loop.
+ *
+ * @tparam BLOCK_SIZE Size of the block (number of threads per block).
+ * @param g_in_data Pointer to the input data in global memory.
+ * @param g_out_data Pointer to the output data in global memory, where the result will be stored.
+ * @return __global__
+ */
 template <unsigned int BLOCK_SIZE>
 __global__ void completelyUnrollReduce(int *g_in_data, int *g_out_data) {
     extern __shared__ int sdata[];
@@ -165,6 +227,15 @@ __global__ void completelyUnrollReduce(int *g_in_data, int *g_out_data) {
     }
 }
 
+/**
+ * @brief Multiple elements reduction kernel that reduces multiple elements in a block of threads.
+ *
+ * @tparam BLOCK_SIZE Size of the block (number of threads per block).
+ * @param g_in_data Pointer to the input data in global memory.
+ * @param g_out_data Pointer to the output data in global memory, where the result will be stored.
+ * @param n Number of elements to reduce in the input data.
+ * @return __global__
+ */
 template <unsigned int BLOCK_SIZE>
 __global__ void multipleElementsReduce(int *g_in_data, int *g_out_data, unsigned int n) {
     extern __shared__ int sdata[];

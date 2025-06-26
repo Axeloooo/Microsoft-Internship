@@ -2,16 +2,19 @@
 
 [![Continuous Integration](https://github.com/Axeloooo/Microsoft-Internship/actions/workflows/continuous_integration.yml/badge.svg)](https://github.com/Axeloooo/Microsoft-Internship/actions/workflows/continuous_integration.yml)
 
+---
+
 ## Documentation
 
 - [Specifications](#specifications)
 - [Benchmark](#benchmarks)
-- [Vector Addition](#vector-addition)
-- [Parallel Reduction](#parallel-reduction)
-- [Dot Product](#dot-product)
-- [AXPY](#axpy)
+- [BLAS Operations](#blas-operations)
+- [Collective Operations](#collective-operations)
 - [License](#license)
 - [Contributors](#contributors)
+- [Extra](#extra)
+
+--
 
 ## Specifications
 
@@ -24,7 +27,11 @@ All benchmarks were run on a system with the following specifications:
 - Threads per block: 256
 - Elements per vector: 4,194,304
 
+---
+
 ## Benchmark
+
+### BLAS Operations
 
 - AXPY:
 
@@ -35,14 +42,7 @@ All benchmarks were run on a system with the following specifications:
 | Vectorized AXPY GPU Kernel | 0.027264     | 1.23072          | 99.53 %     |
 | cuBLAS                     | 0.027136     | 1.23653          | 100 %       |
 
-- Vector Addition:
-
-| Kernel     | Latency (ms) | Bandwidth (TB/s) | % of cuBLAS |
-| ---------- | ------------ | ---------------- | ----------- |
-| CPU        | 14.2268      | 0.0035378        | N/A         |
-| GPU Kernel | 0.026176     | 1.92282          | N/A         |
-
-- Parallel Reduction:
+- Reduction:
 
 | Kernel                              | Latency (ms) | Bandwidth (TB/s) | % of cuBLAS |
 | ----------------------------------- | ------------ | ---------------- | ----------- |
@@ -64,71 +64,140 @@ All benchmarks were run on a system with the following specifications:
 | Optimized Kernel | 0.026528     | 1.26487          | 94.57 %     |
 | cuBLAS           | 0.025088     | 1.33747          | 100 %       |
 
-## Vector Addition
+- GEMM:
 
-1. Run the CUDA code.
+| Kernel | Latency (ms) | GFLOPs | % of cuBLAS |
+| ------ | ------------ | ------ | ----------- |
 
-```bash
-make add
-```
+### Collective Operations
 
-2. Clean up the build files.
+- ReduceScatter:
 
-```bash
-make clean
-```
+| Kernel | Latency (ms) | Bandwidth (TB/s) | % of NCCL |
 
-## Parallel Reduction
+- AllGather:
 
-1. Run the CUDA code.
+| Kernel | Latency (ms) | Bandwidth (TB/s) | % of NCCL |
 
-```bash
-make reduce
-```
+- AllReduce:
 
-2. Clean up the build files.
+| Kernel | Latency (ms) | Bandwidth (TB/s) | % of NCCL |
 
-```bash
-make clean
-```
+- Broadcast:
 
-## Dot Product
+| Kernel | Latency (ms) | Bandwidth (TB/s) | % of NCCL |
 
-1. Run the CUDA code.
+- Reduce:
 
-```bash
-make dot
-```
+| Kernel | Latency (ms) | Bandwidth (TB/s) | % of NCCL |
 
-2. Clean up the build files.
+---
 
-```bash
-make clean
-```
+## BLAS Operations
 
-## AXPY
+This project implements several BLAS (Basic Linear Algebra Subprograms) operations using CUDA. The following sections detail how to run each operation.
 
-1. Run the CUDA code.
+### Reduction
+
+- Run the benchmark.
 
 ```bash
-make axpy
+make blas TARGET=reduce
 ```
 
-2. Clean up the build files.
+### Dot Product
+
+- Run the benchmark.
 
 ```bash
-make clean
+make blas TARGET=dot
 ```
+
+### AXPY
+
+- Run the benchmark.
+
+```bash
+make blas TARGET=axpy
+```
+
+### GEMM
+
+- Run the benchmark.
+
+```bash
+make blas TARGET=gemm
+```
+
+---
+
+## Collective Operations
+
+This project also implements collective operations using MCCL (Micorosft Collective Communication Library) and NCCL (NVIDIA Collective Communications Library). The following sections detail how to run each operation.
+
+### ReduceScatter
+
+- Run the benchmark.
+
+```bash
+make collective TARGET=reducescatter
+```
+
+### AllGather
+
+- Run the benchmark.
+
+```bash
+make collective TARGET=allgather
+```
+
+### AllReduce
+
+- Run the benchmark.
+
+```bash
+make collective TARGET=allreduce
+```
+
+### Broadcast
+
+- Run the benchmark.
+
+```bash
+make collective TARGET=broadcast
+```
+
+### Reduce
+
+- Run the benchmark.
+
+```bash
+make collective TARGET=reduce
+```
+
+---
 
 ## License
 
 This project is licensed under the Apache License 2.0 - see the [LICENSE](LICENSE) file for details.
 
+---
+
 ## Contributors
 
 - [Axel Sanchez](https://github.com/Axeloooo)
 
+---
+
 ## Extra
+
+- Development environment setup using Docker Compose:
+
+```bash
+docker compose up -d
+```
+
+- Development environment setup using Docker:
 
 ```bash
 docker run --gpus all -it \

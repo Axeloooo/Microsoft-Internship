@@ -1,7 +1,7 @@
 /**
- * @file reducescatter.cu
+ * @file benchmark_reducescatter.cu
  * @author Axel Omar Sanchez Peralta (t-axels@microsoft.com)
- * @brief ReduceScatter example using CUDA IPC and MPI
+ * @brief A benchmark for the ReduceScatter operation using MCCL and NCCL.
  * @version 0.1
  * @date 2025-06-13
  *

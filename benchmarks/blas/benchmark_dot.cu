@@ -1,3 +1,14 @@
+/**
+ * @file benchmark_dot.cu
+ * @author Axel Omar Sanchez Peralta
+ * @brief A benchmark for the dot product operation using CUDA and cuBLAS.
+ * @version 0.1
+ * @date 2025-06-26
+ *
+ * @copyright Copyright (c) 2025
+ *
+ */
+
 #include <cublas_v2.h>
 #include <cuda_runtime.h>
 

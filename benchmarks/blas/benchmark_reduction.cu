@@ -1,3 +1,14 @@
+/**
+ * @file benchmark_reduction.cu
+ * @author Axel Omar Sanchez Peralta (t-axels@microsoft)
+ * @brief Benchmark for various reduction algorithms using CUDA.
+ * @version 0.1
+ * @date 2025-06-26
+ *
+ * @copyright Copyright (c) 2025
+ *
+ */
+
 #include <cuda_runtime.h>
 
 #include <cmath>

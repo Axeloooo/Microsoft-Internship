@@ -1,3 +1,14 @@
+/**
+ * @file benchmark_gemm.cu
+ * @author Axel Omar Sanchez Peralta (t-axels@microsoft)
+ * @brief A benchmark for SGEMM (Single-Precision General Matrix Multiply) using CUDA and cuBLAS.
+ * @version 0.1
+ * @date 2025-06-26
+ *
+ * @copyright Copyright (c) 2025
+ *
+ */
+
 #include <cublas_v2.h>
 #include <cuda_runtime.h>
 

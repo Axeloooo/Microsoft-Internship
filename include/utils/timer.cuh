@@ -1,8 +1,7 @@
 /**
  * @file timer.cuh
  * @author your name (you@domain.com)
- * @brief A header file for a CUDA timer class that measures the time taken by
- * CUDA operations.
+ * @brief A header file for a CUDA timer class that measures the time taken by CUDA operations.
  * @version 0.1
  * @date 2025-06-12
  *
