@@ -1,0 +1,25 @@
+services:
+  dev:
+    image: nvcr.io/nvidia/pytorch:24.12-py3
+    container_name: microsoft-internship-dev-axel
+    runtime: nvidia
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+    command: bash
+    network_mode: host
+    cap_add:
+      - SYS_PTRACE
+    devices:
+      - /dev/infiniband
+      - /dev/dri
+    ulimits:
+      memlock: -1
+      stack: 67108864
+    ipc: host
+    shm_size: 32g
+    user: "${UID}:${GID}"
+    volumes:
+      - .:/workspace
+    working_dir: /workspace
+    stdin_open: true
+    tty: true

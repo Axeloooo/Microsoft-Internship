@@ -9,11 +9,15 @@
  *
  */
 
+#include <cuda_runtime.h>
+
 #include <cmath>
 #include <cstdlib>
 #include <iostream>
+#include <vector>
 
-#include "data.cuh"
+#include "utils/checker.cuh"
+#include "utils/data.cuh"
 
 /**
  * @brief Initialize a vector with random values
@@ -23,9 +27,9 @@
  * @param n  Number of elements in the vector
  */
 template <typename T>
-void InitVector(T *vector, const std::size_t &n) {
+void InitVector(T *vector, const unsigned int &n) {
     srand(42);
-    for (std::size_t i = 0; i < n; i++) {
+    for (unsigned int i = 0; i < n; i++) {
         vector[i] = static_cast<T>(rand()) / RAND_MAX;
     }
 }
@@ -39,9 +43,9 @@ void InitVector(T *vector, const std::size_t &n) {
  * @param cols  Number of columns in the matrix
  */
 template <typename T>
-void InitializeMatrix(T *matrix, const std::size_t &rows, const std::size_t &cols) {
+void InitializeMatrix(T *matrix, const unsigned int &rows, const unsigned int &cols) {
     srand(42);
-    for (std::size_t i = 0; i < rows * cols; ++i) {
+    for (unsigned int i = 0; i < rows * cols; ++i) {
         matrix[i] = static_cast<T>(rand()) / RAND_MAX;
     }
 }
@@ -55,8 +59,8 @@ void InitializeMatrix(T *matrix, const std::size_t &rows, const std::size_t &col
  * @param n   Number of elements in the vector
  */
 template <typename T>
-void VerifyVector(const T *h_vector, const T *d_vector, const std::size_t &n) {
-    for (std::size_t i = 0; i < n; ++i) {
+void VerifyVector(const T *h_vector, const T *d_vector, const unsigned int &n) {
+    for (unsigned int i = 0; i < n; ++i) {
         if (std::fabs(d_vector[i] - h_vector[i]) > 1e-5) {
             std::cerr << "Results do not match!" << std::endl;
             std::cerr << "Data mismatch at index " << i << ": " << d_vector[i] << " != " << h_vector[i] << std::endl;
@@ -76,9 +80,9 @@ void VerifyVector(const T *h_vector, const T *d_vector, const std::size_t &n) {
  * @param n Number of columns in the matrix
  */
 template <typename T>
-void VerifyMatrix(const T *h_matrix, const T *d_matrix, const std::size_t &m, const std::size_t &n) {
-    for (std::size_t i = 0; i < m * n; i++) {
-        const std::size_t diff = std::fabs(d_matrix[i] - h_matrix[i]);
+void VerifyMatrix(const T *h_matrix, const T *d_matrix, const unsigned int &m, const unsigned int &n) {
+    for (unsigned int i = 0; i < m * n; i++) {
+        const unsigned int diff = std::fabs(d_matrix[i] - h_matrix[i]);
         if (diff > 0.01) {
             std::cerr << "Results don't match!" << std::endl;
             return;
@@ -87,15 +91,42 @@ void VerifyMatrix(const T *h_matrix, const T *d_matrix, const std::size_t &m, co
     std::cout << "Results match!" << std::endl;
 }
 
-template void InitVector<float>(float *vector, const std::size_t &n);
-template void InitVector<double>(double *vector, const std::size_t &n);
-template void InitVector<int>(int *vector, const std::size_t &n);
+/**
+ * @brief Verify the results of a collective operation
+ *
+ * @tparam T Data type for the collective operation (e.g., float, int)
+ * @param label Label for the collective operation (e.g., "AllReduce", "Broadcast")
+ * @param d_buff Pointer to the device output buffer
+ * @param h_buff Reference host buffer containing expected results
+ * @param rank Rank of the process in the collective operation
+ * @param n Number of elements in the buffer
+ */
+template <typename T>
+void VerifyCollective(const std::string &label, const T *d_buff, const std::vector<T> &h_buff, int rank, unsigned int n) {
+    std::vector<T> check(n);
+    CUDA_CHECK(cudaMemcpy(check.data(), d_buff, n * sizeof(T), cudaMemcpyDeviceToHost));
+    bool ok = true;
+    for (unsigned int i = 0; i < n; ++i) {
+        if (std::fabs(check[i] - h_buff[i]) > 1e-5f) {
+            ok = false;
+            break;
+        }
+    }
 
-template void InitializeMatrix<float>(float *matrix, const std::size_t &rows, const std::size_t &cols);
-template void InitializeMatrix<double>(double *matrix, const std::size_t &rows, const std::size_t &cols);
+    std::cout << "Rank " << rank << " " << label << " : " << (ok ? "PASS" : "FAIL") << std::endl;
+}
 
-template void VerifyVector<float>(const float *h_vector, const float *d_vector, const std::size_t &n);
-template void VerifyVector<double>(const double *h_vector, const double *d_vector, const std::size_t &n);
+template void InitVector<float>(float *vector, const unsigned int &n);
+template void InitVector<int>(int *vector, const unsigned int &n);
 
-template void VerifyMatrix<float>(const float *h_matrix, const float *d_matrix, const std::size_t &m, const std::size_t &n);
-template void VerifyMatrix<double>(const double *h_matrix, const double *d_matrix, const std::size_t &m, const std::size_t &n);
+template void InitializeMatrix<float>(float *matrix, const unsigned int &rows, const unsigned int &cols);
+template void InitializeMatrix<int>(int *matrix, const unsigned int &rows, const unsigned int &cols);
+
+template void VerifyVector<float>(const float *h_vector, const float *d_vector, const unsigned int &n);
+template void VerifyVector<int>(const int *h_vector, const int *d_vector, const unsigned int &n);
+
+template void VerifyMatrix<float>(const float *h_matrix, const float *d_matrix, const unsigned int &m, const unsigned int &n);
+template void VerifyMatrix<int>(const int *h_matrix, const int *d_matrix, const unsigned int &m, const unsigned int &n);
+
+template void VerifyCollective<float>(const std::string &label, const float *d_buff, const std::vector<float> &h_buff, int world_rank, unsigned int n);
+template void VerifyCollective<int>(const std::string &label, const int *d_buff, const std::vector<int> &h_buff, int world_rank, unsigned int n);
