@@ -41,7 +41,7 @@ CudaTimer::CudaTimer(const std::string &label, const unsigned int &bytes, const 
 }
 
 /**
- * @brief Destroy the Cuda Timer:: Cuda Timer object
+ * @brief Destroy the Cuda Timer object
  *
  */
 CudaTimer::~CudaTimer() {
