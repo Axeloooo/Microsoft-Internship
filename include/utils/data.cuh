@@ -9,6 +9,8 @@
  *
  */
 
+#pragma once
+
 #ifndef DATA_CUH
 #define DATA_CUH
 

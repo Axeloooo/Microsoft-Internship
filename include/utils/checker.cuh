@@ -9,6 +9,8 @@
  *
  */
 
+#pragma once
+
 #ifndef CHECKER_CUH
 #define CHECKER_CUH
 

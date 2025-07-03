@@ -14,14 +14,57 @@
 
 #include <cassert>
 #include <cstddef>
+#include <cstdio>
 #include <cstdlib>
+#include <cstring>
 #include <iostream>
+#include <random>
 #include <vector>
 
 #include "mccl/mccl.cuh"
 #include "utils/checker.cuh"
 
-constexpr unsigned int kBlockSize = 256;
+constexpr std::size_t kBlockSize = 256;
+
+void mcclGetUniqueId(mcclUniqueId* id) {
+    std::random_device rd;
+    id->token[0] = (static_cast<uint64_t>(rd()) << 32) | rd();
+    id->token[1] = (static_cast<uint64_t>(rd()) << 32) | rd();
+}
+
+void mcclCommInitRank(mcclComm_t* comm, int size, mcclUniqueId id, int rank) {
+    comm->rank = rank;
+    comm->size = size;
+    comm->cuda_dev = rank % size;
+    CUDA_CHECK(cudaSetDevice(comm->cuda_dev));
+
+    // 1. discover local ranks (not strictly needed for 1 ring)
+    // 2. enable P2P
+    for (std::size_t d = 0; d < size; ++d) {
+        if (d != rank) {
+            unsigned int devPeer = d % size;
+            int can;
+            CUDA_CHECK(cudaDeviceCanAccessPeer(&can, comm->cuda_dev, devPeer));
+            if (can) {
+                cudaDeviceEnablePeerAccess(devPeer, 0);
+            }
+        }
+    }
+
+    // 3. allocate channel table and fill prev/next ranks
+    comm->channels = new mcclChannel[1];
+    comm->channels[0].prev.peer_rank = (rank + size - 1) % size;
+    comm->channels[0].next.peer_rank = (rank + 1) % size;
+
+    CUDA_CHECK(cudaStreamCreateWithFlags(&comm->stream, cudaStreamNonBlocking));
+}
+
+void mcclCommDestroy(mcclComm_t* comm) {
+    cudaIpcCloseMemHandle(comm->channels[0].prev.peer_recvbuff);
+    cudaIpcCloseMemHandle(comm->channels[0].next.peer_recvbuff);
+    CUDA_CHECK(cudaStreamDestroy(comm->stream));
+    delete[] comm->channels;
+}
 
 /**
  * @brief CUDA kernel for element-wise sum operation

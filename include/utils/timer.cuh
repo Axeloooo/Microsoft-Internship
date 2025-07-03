@@ -9,6 +9,8 @@
  *
  */
 
+#pragma once
+
 #ifndef TIMER_CUH
 #define TIMER_CUH
 

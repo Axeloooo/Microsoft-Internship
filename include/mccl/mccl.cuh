@@ -9,6 +9,8 @@
  *
  */
 
+#pragma once
+
 #ifndef COLLECTIVES_CUH
 #define COLLECTIVES_CUH
 
@@ -17,6 +19,37 @@
 #include <cstddef>
 #include <iostream>
 #include <vector>
+
+struct PeerLink {
+    int peer_rank;
+    int cuda_dev;
+    void *peer_recvbuff;
+};
+
+struct mcclChannel {
+    PeerLink prev;
+    PeerLink next;
+};
+
+struct mcclComm_t {
+    int rank;
+    int size;
+    int cuda_dev;
+    mcclChannel *channels;
+    cudaStream_t stream;
+};
+
+struct mcclUniqueId {
+    unsigned int token[2];
+};
+
+enum mcclDataType_t { mcclFloat, mcclFloat32 };
+
+void mcclGetUniqueId(mcclUniqueId *id);
+
+void mcclCommInitRank(mcclComm_t *comm, int size, mcclUniqueId id, int rank);
+
+void mcclCommDestroy(mcclComm_t *comm);
 
 /**
  * @brief Enumeration for reduction operations

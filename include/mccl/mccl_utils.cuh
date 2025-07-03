@@ -1,3 +1,16 @@
+/**
+ * @file mccl_utils.cuh
+ * @author Axel Omar Sanchez Peralta (t-axels@microsoft.com)
+ * @brief Utility functions for initializing and finalizing NCCL and CUDA in a collective communication context.
+ * @version 0.1
+ * @date 2025-07-02
+ *
+ * @copyright Copyright (c) 2025
+ *
+ */
+
+#pragma once
+
 #ifndef INCLUDE_MCCL_UTILS_CUH_
 #define INCLUDE_MCCL_UTILS_CUH_
 
