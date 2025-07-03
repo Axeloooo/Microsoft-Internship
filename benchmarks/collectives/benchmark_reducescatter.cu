@@ -36,6 +36,9 @@ constexpr unsigned int kN = 4194304;
 int main(int argc, char** argv) {
     MPI_CHECK(MPI_Init(&argc, &argv));
 
+    // Set random seed for reproducibility
+    srand(42);
+
     int world_size;
     MPI_Comm_size(MPI_COMM_WORLD, &world_size);
 

@@ -41,6 +41,9 @@ void dotProductCpu(const float *a, const float *b, float *c, const int n) {
 }
 
 int main() {
+    // Set random seed for reproducibility
+    srand(42);
+
     // Initialize cuBLAS handle
     cublasHandle_t cublasHandle;
     CHECK_CUBLAS(cublasCreate(&cublasHandle));

@@ -29,6 +29,9 @@ void axpyCpu(const float alpha, const float *x, float *y, const int n) {
 }
 
 int main() {
+    // Set random seed for reproducibility
+    srand(42);
+
     cublasHandle_t cublasHandle;
     CHECK_CUBLAS(cublasCreate(&cublasHandle));
 

@@ -131,6 +131,9 @@ void ValidateResults(void *d_buff, const std::vector<T> &h_golden, int world_ran
  * @return int
  */
 int main(int argc, char **argv) {
+    // Set random seed for reproducibility
+    srand(42);
+
     // MPI intialization
     MPI_Init(&argc, &argv);
 

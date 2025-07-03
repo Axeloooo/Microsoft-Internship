@@ -30,6 +30,9 @@ constexpr std::size_t kRootGpu = 0;
  * @return int
  */
 int main(int argc, char **argv) {
+    // Set random seed for reproducibility
+    srand(42);
+
     MPI_CHECK(MPI_Init(&argc, &argv));
 
     int world_rank, world_size = 0;

@@ -29,9 +29,7 @@
  */
 template <typename T>
 void InitVector(T *vector, const unsigned int &n) {
-    srand(42);
     for (unsigned int i = 0; i < n; ++i) {
-        // avoid __half/int arithmetic ambiguity
         float val = static_cast<float>(rand()) / RAND_MAX;
         vector[i] = static_cast<T>(val);
     }
@@ -47,7 +45,6 @@ void InitVector(T *vector, const unsigned int &n) {
  */
 template <typename T>
 void InitializeMatrix(T *matrix, const unsigned int &rows, const unsigned int &cols) {
-    srand(42);
     for (unsigned int i = 0; i < rows * cols; ++i) {
         matrix[i] = static_cast<T>(rand()) / RAND_MAX;
     }
