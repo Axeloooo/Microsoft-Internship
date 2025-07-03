@@ -11,9 +11,6 @@
 
 #pragma once
 
-#ifndef DATA_CUH
-#define DATA_CUH
-
 #include <cstddef>
 #include <string>
 #include <vector>
@@ -74,5 +71,3 @@ void VerifyMatrix(const T *h_matrix, const T *d_matrix, const unsigned int &m, c
  */
 template <typename T>
 void VerifyCollective(const std::string &label, const T *d_buff, const std::vector<T> &h_buff, int rank, unsigned int n);
-
-#endif

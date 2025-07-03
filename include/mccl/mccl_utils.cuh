@@ -11,9 +11,6 @@
 
 #pragma once
 
-#ifndef INCLUDE_MCCL_UTILS_CUH_
-#define INCLUDE_MCCL_UTILS_CUH_
-
 #include <cuda_runtime.h>
 #include <mpi.h>
 #include <nccl.h>
@@ -51,5 +48,3 @@ inline void Finalize(CollectiveComm* mccl_comm) {
     CUDA_CHECK(cudaStreamDestroy(mccl_comm->stream));
     MPI_CHECK(MPI_Finalize());
 }
-
-#endif

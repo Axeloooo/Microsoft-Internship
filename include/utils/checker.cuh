@@ -11,9 +11,6 @@
 
 #pragma once
 
-#ifndef CHECKER_CUH
-#define CHECKER_CUH
-
 #include <cublas_v2.h>
 #include <cuda_runtime.h>
 
@@ -71,5 +68,3 @@
             std::exit(EXIT_FAILURE);                                                                                                  \
         }                                                                                                                             \
     } while (0)
-
-#endif

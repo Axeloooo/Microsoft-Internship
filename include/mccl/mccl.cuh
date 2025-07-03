@@ -11,9 +11,6 @@
 
 #pragma once
 
-#ifndef COLLECTIVES_CUH
-#define COLLECTIVES_CUH
-
 #include <cuda_runtime.h>
 
 #include <cstddef>
@@ -191,5 +188,3 @@ class MCCL {
      */
     const std::vector<cudaStream_t> &GetStreams() const;
 };
-
-#endif
