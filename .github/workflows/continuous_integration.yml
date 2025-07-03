@@ -18,14 +18,25 @@ jobs:
         uses: Jimver/cuda-toolkit@v0.2.23
         id: cuda-toolkit
         with:
-          cuda: "12.5.0"
+          cuda: "12.4.1"
           method: "network"
 
-      - name: Install OpenMPI
-        run: sudo apt-get update && sudo apt-get install -y openmpi-bin libopenmpi-dev
+      - name: Install TensorRT
+        run: |
+          set -e
+          sudo apt-get update -y
+          sudo apt-get install -y wget gnupg lsb-release
+          distro="$(lsb_release -cs)"             # jammy on ubuntu-latest
+          wget https://developer.download.nvidia.com/compute/cuda/repos/${distro}/x86_64/cuda-keyring_1.1-1_all.deb
+          sudo dpkg -i cuda-keyring_1.1-1_all.deb
+          sudo apt-get update -y
+          sudo apt-get install -y --no-install-recommends \
+               libnvinfer-dev libnvinfer8 \
+               libnvinfer-plugin-dev \
+               libnvonnxparsers-dev libnvparsers-dev
 
-      - name: Install NCCL
-        run: sudo apt-get update && sudo apt-get install -y libnccl2 libnccl-dev
+      - name: Install OpenMPI + NCCL
+        run: sudo apt-get install -y openmpi-bin libopenmpi-dev libnccl2 libnccl-dev
 
       - name: Build Project
         run: make build
