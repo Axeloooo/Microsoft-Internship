@@ -8,35 +8,13 @@ on:
 
 jobs:
   build:
-    name: Build and Compile
     runs-on: ubuntu-latest
+    container:
+      image: nvcr.io/nvidia/pytorch:24.12-py3
+      credentials:
+        username: ${{ secrets.NGC_USERNAME }}
+        password: ${{ secrets.NGC_API_KEY }}
+
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Install CUDA
-        uses: Jimver/cuda-toolkit@v0.2.23
-        id: cuda-toolkit
-        with:
-          cuda: "12.4.1"
-          method: "network"
-
-      - name: Install TensorRT
-        run: |
-          set -e
-          sudo apt-get update -y
-          sudo apt-get install -y wget gnupg lsb-release
-          distro="$(lsb_release -cs)"             # jammy on ubuntu-latest
-          wget https://developer.download.nvidia.com/compute/cuda/repos/${distro}/x86_64/cuda-keyring_1.1-1_all.deb
-          sudo dpkg -i cuda-keyring_1.1-1_all.deb
-          sudo apt-get update -y
-          sudo apt-get install -y --no-install-recommends \
-               libnvinfer-dev libnvinfer8 \
-               libnvinfer-plugin-dev \
-               libnvonnxparsers-dev libnvparsers-dev
-
-      - name: Install OpenMPI + NCCL
-        run: sudo apt-get install -y openmpi-bin libopenmpi-dev libnccl2 libnccl-dev
-
-      - name: Build Project
-        run: make build
+      - uses: actions/checkout@v4
+      - run: make build
