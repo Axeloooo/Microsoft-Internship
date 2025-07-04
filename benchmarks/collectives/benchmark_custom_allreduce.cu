@@ -92,35 +92,67 @@ void ShareIpcPtrs(PtrT local_ptr, std::vector<PtrT> &remote_ptrs, int local_rank
  * @tparam T fp32 or __half
  * @param d_actual
  * @param h_golden
+ * @param world_size
  * @param world_rank
  * @param nElts
  */
 template <typename T>
-void ValidateResults(void *d_buff, const std::vector<T> &h_golden, int world_rank, int nElts) {
+void ValidateResults(void *d_buff, const std::vector<T> &h_golden, int world_size, int world_rank, int nElts) {
     // Copy the results from device to host
     std::vector<T> h_actual(nElts);
     CUDA_CHECK(cudaMemcpy(h_actual.data(), d_buff, nElts * sizeof(T), cudaMemcpyDeviceToHost));
 
-    // Set epsilon for floating-point tolerance
-    const float eps = 1e-3f;
-    std::size_t correct = 0;
+    // Adust epsilon based on data type
+    const float eps = std::is_same_v<T, float> ? 1e-5f : 1e-2f;
 
-    // Perform element-wise comparison
+    // Initialize counter, sums, and max errors
+    std::size_t correct = 0;
+    double abs_sum = 0.0;
+    double sq_err_sum = 0.0;
+    float max_abs_err = 0.f;
+    float max_rel_err = 0.f;
+
+    // Perform element-wise comparison and compute statistics
     for (int i = 0; i < nElts; ++i) {
-        const float g = std::is_same_v<T, float> ? static_cast<float>(h_golden[i]) : __half2float(h_golden[i]);
-        const float a = std::is_same_v<T, float> ? static_cast<float>(h_actual[i]) : __half2float(h_actual[i]);
-        if (fabsf(g - a) < eps) {
-            ++correct;
-        }
+        float g = std::is_same_v<T, float> ? static_cast<float>(h_golden[i]) : __half2float(h_golden[i]);
+        float a = std::is_same_v<T, float> ? static_cast<float>(h_actual[i]) : __half2float(h_actual[i]);
+
+        const float diff = fabsf(g - a);
+        const float rel = (fabsf(g) > 0.f) ? diff / fabsf(g) : diff;  // guard g==0
+
+        if (diff < eps) ++correct;
+
+        abs_sum += diff;
+        sq_err_sum += static_cast<double>(diff) * diff;
+
+        max_abs_err = fmaxf(max_abs_err, diff);
+        max_rel_err = fmaxf(max_rel_err, rel);
     }
 
-    // Check if the number of correct elements matches the expected count
-    int local_ok = (correct == static_cast<std::size_t>(nElts));
-    int global_ok = 0;
-    MPI_Allreduce(&local_ok, &global_ok, 1, MPI_INT, MPI_LAND, MPI_COMM_WORLD);
+    // Perform global reduction to gather statistics across all ranks
+    std::size_t global_correct;
+    double global_abs_sum, global_sq_sum;
+    float global_max_abs, global_max_rel;
 
+    MPI_Allreduce(&correct, &global_correct, 1, MPI_UNSIGNED_LONG_LONG, MPI_SUM, MPI_COMM_WORLD);
+    MPI_Allreduce(&abs_sum, &global_abs_sum, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
+    MPI_Allreduce(&sq_err_sum, &global_sq_sum, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
+    MPI_Allreduce(&max_abs_err, &global_max_abs, 1, MPI_FLOAT, MPI_MAX, MPI_COMM_WORLD);
+    MPI_Allreduce(&max_rel_err, &global_max_rel, 1, MPI_FLOAT, MPI_MAX, MPI_COMM_WORLD);
+
+    const std::size_t total_elems = static_cast<std::size_t>(nElts) * static_cast<std::size_t>(world_size);
+
+    // Report global results
     if (world_rank == 0) {
-        std::cout << "Accuracy: " << 100.0f * correct / nElts << "%" << std::endl;
+        const double meanAbsErr = global_abs_sum / total_elems;
+        const double rmse = std::sqrt(global_sq_sum / total_elems);
+        const double accuracy = 100.0 * global_correct / total_elems;
+
+        std::cout << "Accuracy: " << accuracy << "%" << std::endl;
+        std::cout << "Max Absolute Error: " << global_max_abs << std::endl;
+        std::cout << "Mean Absolute Error: " << meanAbsErr << std::endl;
+        std::cout << "Max Relative Error: " << global_max_rel << std::endl;
+        std::cout << "Root Mean Square Error: " << rmse << std::endl;
     }
 }
 
@@ -255,11 +287,11 @@ int main(int argc, char **argv) {
     if (dtype == datatype_enum::TYPE_FP32) {
         h_gold_float.resize(nElts);
         CUDA_CHECK(cudaMemcpy(h_gold_float.data(), d_recvbuff, bytes, cudaMemcpyDeviceToHost));
-        ValidateResults<float>(d_recvbuff, h_gold_float, world_rank, nElts);
+        ValidateResults<float>(d_recvbuff, h_gold_float, world_size, world_rank, nElts);
     } else {
         h_gold_half.resize(nElts);
         CUDA_CHECK(cudaMemcpy(h_gold_half.data(), d_recvbuff, bytes, cudaMemcpyDeviceToHost));
-        ValidateResults<__half>(d_recvbuff, h_gold_half, world_rank, nElts);
+        ValidateResults<__half>(d_recvbuff, h_gold_half, world_size, world_rank, nElts);
     }
 
     // Reset the receive buffer
@@ -281,9 +313,9 @@ int main(int argc, char **argv) {
 
     // Validate results of Custom One-Shot AllReduce
     if (dtype == datatype_enum::TYPE_FP32) {
-        ValidateResults<float>(d_recvbuff, h_gold_float, world_rank, nElts);
+        ValidateResults<float>(d_recvbuff, h_gold_float, world_size, world_rank, nElts);
     } else {
-        ValidateResults<__half>(d_recvbuff, h_gold_half, world_rank, nElts);
+        ValidateResults<__half>(d_recvbuff, h_gold_half, world_size, world_rank, nElts);
     }
 
     // Reset the receive buffer
@@ -305,9 +337,9 @@ int main(int argc, char **argv) {
 
     // Validate results of Custom Two-Shot AllReduce
     if (dtype == datatype_enum::TYPE_FP32) {
-        ValidateResults<float>(d_recvbuff, h_gold_float, world_rank, nElts);
+        ValidateResults<float>(d_recvbuff, h_gold_float, world_size, world_rank, nElts);
     } else {
-        ValidateResults<__half>(d_recvbuff, h_gold_half, world_rank, nElts);
+        ValidateResults<__half>(d_recvbuff, h_gold_half, world_size, world_rank, nElts);
     }
 
     // Cleanup resources
