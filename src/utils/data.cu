@@ -9,7 +9,7 @@
  *
  */
 
-#include <cuda_fp16.h>  // + include for __half helpers
+#include <cuda_fp16.h>
 #include <cuda_runtime.h>
 
 #include <cmath>

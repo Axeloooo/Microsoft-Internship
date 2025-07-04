@@ -9,6 +9,7 @@
  *
  */
 
+#include <cuda_fp16.h>
 #include <cuda_runtime.h>
 #include <mpi.h>
 #include <nccl.h>
@@ -138,7 +139,7 @@ int main(int argc, char **argv) {
     MPI_Init(&argc, &argv);
 
     // Setup default hyperparameters
-    std::size_t nElts = 1 << 22;
+    std::size_t nElts = 1024 * 1024 * 4;
     std::string dtype_s = "fp32";
     int iters = 10;
 
