@@ -33,6 +33,7 @@ include_directories(${PROJECT_SOURCE_DIR}/include)
 # ---------------------------------------------------------------
 file(GLOB_RECURSE SRC_FILES CONFIGURE_DEPENDS
      ${PROJECT_SOURCE_DIR}/src/*.cu
+     ${PROJECT_SOURCE_DIR}/src/*.cpp
      ${PROJECT_SOURCE_DIR}/include/common/*.cpp
      ${PROJECT_SOURCE_DIR}/include/common/*.cu)
 

@@ -21,7 +21,7 @@
 #include <string>
 #include <vector>
 
-namespace tensorrt_llm::common {
+namespace trt_allreduce::common {
 #if ENABLE_BF16
 static inline std::basic_ostream<char>& operator<<(std::basic_ostream<char>& stream, __nv_bfloat16 const& val) {
     stream << __bfloat162float(val);
@@ -77,4 +77,4 @@ inline std::string vec2str(std::vector<T> vec) {
 
 inline bool strStartsWith(std::string const& str, std::string const& prefix) { return str.rfind(prefix, 0) == 0; }
 
-}  // namespace tensorrt_llm::common
+}  // namespace trt_allreduce::common

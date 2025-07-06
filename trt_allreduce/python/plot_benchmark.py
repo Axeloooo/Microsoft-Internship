@@ -1,42 +1,114 @@
-import sys
-import pandas as pd
+#!/usr/bin/env python3
+"""Plot latency benchmarks from CSV.
+
+Reads a CSV file containing benchmark results and plots latency (ms) versus
+message size (bytes) for different AllReduce implementations. The resulting
+figure is saved to the specified output path.
+
+Example
+-------
+python plot_benchmarks.py --csv data/benchmarks.csv --out images/latency_vs_size.png
+"""
+from __future__ import annotations
+
+import argparse
+import pathlib
+
 import matplotlib.pyplot as plt
+import pandas as pd
 
 
-def _plot(df: pd.DataFrame, metric: str, ylabel: str) -> None:
-    """Plot the specified metric from the benchmark results.
+def parse_args() -> argparse.Namespace:  # noqa: D401
+    """Parse command-line options.
+
+    Returns:
+        argparse.Namespace: Namespace containing parsed command-line arguments.
+    """
+    parser = argparse.ArgumentParser(description="Plot AllReduce latency benchmarks.")
+    parser.add_argument(
+        "--csv",
+        type=pathlib.Path,
+        default=pathlib.Path("data/benchmarks.csv"),
+        help="Path to the input CSV file.",
+    )
+    parser.add_argument(
+        "--out",
+        type=pathlib.Path,
+        default=pathlib.Path("images/latency_vs_size.png"),
+        help="Output path for the generated plot (PNG).",
+    )
+    return parser.parse_args()
+
+
+def ensure_parent_dir(path: pathlib.Path) -> None:
+    """Create the parent directory of *path* if it does not already exist."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+
+
+def load_data(csv_path: pathlib.Path) -> pd.DataFrame:
+    """Load benchmark data from a CSV file.
 
     Args:
-        df (pd.DataFrame): DataFrame containing benchmark results.
-        metric (str): The metric to plot (e.g., "latency_ms" or "bandwidth_TBps").
-        ylabel (str): Label for the y-axis of the plot.
+        csv_path (pathlib.Path): Path to the CSV file containing benchmark results.
+
+    Raises:
+        SystemExit: If the CSV file is not found or required columns are missing.
+        SystemExit: If required columns are missing in the CSV.
+
+    Returns:
+        pd.DataFrame: DataFrame containing the benchmark results with columns.
+    """
+    try:
+        df = pd.read_csv(csv_path)
+    except FileNotFoundError as exc:
+        raise SystemExit(f"CSV file not found: {csv_path}") from exc
+
+    required_cols = {"implementation", "message_bytes", "latency_ms"}
+    missing = required_cols.difference(df.columns)
+    if missing:
+        raise SystemExit(f"Missing required columns in CSV: {', '.join(missing)}")
+
+    return df
+
+
+def plot_latency(df: pd.DataFrame, out_path: pathlib.Path) -> None:
+    """Plot latency vs. message size from the given DataFrame.
+
+    Args:
+        df (pd.DataFrame): DataFrame containing benchmark results with columns.
+        out_path (pathlib.Path): Path to save the output plot image.
     """
     impls = df["implementation"].unique()
+    fig, ax = plt.subplots(figsize=(8, 5))
+
     for impl in impls:
-        sub = df[df["implementation"] == impl]
-        plt.figure()
-        plt.plot(sub["message_bytes"] / 1024, sub[metric], marker="o", label=impl)
-        plt.title(f"{impl} – {ylabel} vs. message size")
-        plt.xlabel("Message size [KiB]")
-        plt.ylabel(ylabel)
-        plt.grid(True)
-        plt.tight_layout()
+        subset = df[df["implementation"] == impl]
+        # Ensure data are sorted for nicer lines.
+        subset = subset.sort_values("message_bytes")
+        ax.plot(
+            subset["message_bytes"],
+            subset["latency_ms"],
+            marker="o",
+            label=impl,
+        )
+
+    ax.set_xlabel("Message Size (bytes)")
+    ax.set_ylabel("Latency (ms)")
+    ax.set_title("AllReduce Latency vs. Message Size")
+    ax.grid(True, which="both", linestyle="--", linewidth=0.5)
+    ax.legend()
+    fig.tight_layout()
+
+    ensure_parent_dir(out_path)
+    fig.savefig(out_path, dpi=300)
+    print(f"Plot saved to {out_path}")
 
 
-def main(path: str) -> None:
-    """Main function to read benchmark results and plot latency and bandwidth.
-
-    Args:
-        path (str): Path to the CSV file containing benchmark results.
-    """
-    df = pd.read_csv(path)
-    _plot(df, "latency_ms", "Latency [ms]")
-    _plot(df, "bandwidth_TBps", "Bandwidth [TB/s]")
-    plt.show()
+def main() -> None:
+    args = parse_args()
+    data = load_data(args.csv)
+    plot_latency(data, args.out)
 
 
 if __name__ == "__main__":
-    if len(sys.argv) != 2:
-        print("Usage: python3 plot_benchmark.py benchmark_results.csv")
-        sys.exit(1)
-    main(sys.argv[1])
+    main()

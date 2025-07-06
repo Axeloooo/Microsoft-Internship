@@ -15,7 +15,7 @@
 
 #include "common/tllmException.h"
 
-namespace tensorrt_llm::common {
+namespace trt_allreduce::common {
 
 Logger::Logger() {
     char* isFirstRankOnlyChar = std::getenv("TLLM_LOG_FIRST_RANK_ONLY");
@@ -49,4 +49,4 @@ Logger::Logger() {
 
 void Logger::log(std::exception const& ex, Logger::Level level) { log(level, "%s: %s", TllmException::demangle(typeid(ex).name()).c_str(), ex.what()); }
 
-}  // namespace tensorrt_llm::common
+}  // namespace trt_allreduce::common

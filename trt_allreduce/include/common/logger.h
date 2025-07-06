@@ -19,7 +19,7 @@
 
 #include "common/stringUtils.h"
 
-namespace tensorrt_llm::common {
+namespace trt_allreduce::common {
 
 class Logger {
 // On Windows, the file wingdi.h is included which has
@@ -121,11 +121,11 @@ void Logger::log(const Logger::Level level, const int rank, char const* format, 
     }
 }
 
-#define TLLM_LOG(level, ...) tensorrt_llm::common::Logger::getLogger()->log(level, __VA_ARGS__)
-#define TLLM_LOG_TRACE(...) TLLM_LOG(tensorrt_llm::common::Logger::TRACE, __VA_ARGS__)
-#define TLLM_LOG_DEBUG(...) TLLM_LOG(tensorrt_llm::common::Logger::DEBUG, __VA_ARGS__)
-#define TLLM_LOG_INFO(...) TLLM_LOG(tensorrt_llm::common::Logger::INFO, __VA_ARGS__)
-#define TLLM_LOG_WARNING(...) TLLM_LOG(tensorrt_llm::common::Logger::WARNING, __VA_ARGS__)
-#define TLLM_LOG_ERROR(...) TLLM_LOG(tensorrt_llm::common::Logger::ERROR, __VA_ARGS__)
-#define TLLM_LOG_EXCEPTION(ex, ...) tensorrt_llm::common::Logger::getLogger()->log(ex, ##__VA_ARGS__)
-}  // namespace tensorrt_llm::common
+#define TLLM_LOG(level, ...) trt_allreduce::common::Logger::getLogger()->log(level, __VA_ARGS__)
+#define TLLM_LOG_TRACE(...) TLLM_LOG(trt_allreduce::common::Logger::TRACE, __VA_ARGS__)
+#define TLLM_LOG_DEBUG(...) TLLM_LOG(trt_allreduce::common::Logger::DEBUG, __VA_ARGS__)
+#define TLLM_LOG_INFO(...) TLLM_LOG(trt_allreduce::common::Logger::INFO, __VA_ARGS__)
+#define TLLM_LOG_WARNING(...) TLLM_LOG(trt_allreduce::common::Logger::WARNING, __VA_ARGS__)
+#define TLLM_LOG_ERROR(...) TLLM_LOG(trt_allreduce::common::Logger::ERROR, __VA_ARGS__)
+#define TLLM_LOG_EXCEPTION(ex, ...) trt_allreduce::common::Logger::getLogger()->log(ex, ##__VA_ARGS__)
+}  // namespace trt_allreduce::common

@@ -50,16 +50,11 @@ class CudaTimer {
     void Start();
 
     /**
-     * @brief Stop the timer and calculate the elapsed time.
+     * @brief Stop the timer and return the elapsed time in milliseconds.
      *
+     * @return float
      */
-    void Stop();
-
-    /**
-     * @brief Print the results of the timer.
-     *
-     */
-    void Print() const;
+    float Stop();
 };
 
 }  // namespace trt_allreduce::utils

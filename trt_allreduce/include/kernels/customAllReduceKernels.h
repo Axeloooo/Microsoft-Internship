@@ -22,7 +22,7 @@
 #include "common/cudaUtils.h"
 #include "common/tensor.h"
 
-namespace tensorrt_llm::kernels {
+namespace trt_allreduce::kernels {
 
 constexpr size_t WARP_SIZE = 32;
 constexpr size_t CUSTOM_AR_SIZE_THRESHOLD = 50331648;
@@ -88,4 +88,4 @@ struct CustomARCommTypeConverter<__nv_bfloat16> {
 void customAllReduce(kernels::AllReduceParams& params, void* data, size_t elts, size_t size_per_elem, common::datatype_enum dataType, AllReduceStrategyType strat,
                      cudaStream_t stream);
 
-}  // namespace tensorrt_llm::kernels
+}  // namespace trt_allreduce::kernels

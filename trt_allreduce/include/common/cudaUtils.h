@@ -27,7 +27,7 @@
 #include "common/logger.h"
 #include "common/tllmException.h"
 
-namespace tensorrt_llm::common {
+namespace trt_allreduce::common {
 
 // workspace for cublas gemm : 32MB
 #define CUBLAS_WORKSPACE_SIZE 33554432
@@ -120,7 +120,7 @@ inline void syncAndCheck(const char* const file, int const line) {
     }
 }
 
-#define sync_check_cuda_error() tensorrt_llm::common::syncAndCheck(__FILE__, __LINE__)
+#define sync_check_cuda_error() trt_allreduce::common::syncAndCheck(__FILE__, __LINE__)
 
 #define PRINT_FUNC_NAME_()                                                        \
     do {                                                                          \
@@ -388,12 +388,12 @@ template void printMatrix(const uint32_t* ptr, int m, int k, int stride, bool is
 template void printMatrix(const uint64_t* ptr, int m, int k, int stride, bool is_device_ptr);
 template void printMatrix(const int* ptr, int m, int k, int stride, bool is_device_ptr);
 
-}  // namespace tensorrt_llm::common
+}  // namespace trt_allreduce::common
 
 /*
  * Macros compliant with TensorRT coding conventions
  */
-#define TLLM_CUDA_CHECK(stat)                                           \
-    do {                                                                \
-        tensorrt_llm::common::check((stat), #stat, __FILE__, __LINE__); \
+#define TLLM_CUDA_CHECK(stat)                                            \
+    do {                                                                 \
+        trt_allreduce::common::check((stat), #stat, __FILE__, __LINE__); \
     } while (0)

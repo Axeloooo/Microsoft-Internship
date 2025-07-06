@@ -14,11 +14,11 @@
 #include "common/cudaTypeUtils.cuh"
 #include "kernels/customAllReduceKernels.h"
 
-namespace tensorrt_llm::kernels {
+namespace trt_allreduce::kernels {
 
-using tensorrt_llm::common::datatype_enum;
-using tensorrt_llm::common::divUp;
-using tensorrt_llm::common::hadd2;
+using trt_allreduce::common::datatype_enum;
+using trt_allreduce::common::divUp;
+using trt_allreduce::common::hadd2;
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -420,4 +420,4 @@ void customAllReduce(kernels::AllReduceParams& params, void* data, size_t elts, 
     }
 }
 
-}  // namespace tensorrt_llm::kernels
+}  // namespace trt_allreduce::kernels

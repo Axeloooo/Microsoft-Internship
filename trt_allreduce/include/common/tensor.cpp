@@ -32,7 +32,7 @@
 #include <dirent.h>
 #endif  // !defined(_WIN32)
 
-namespace tensorrt_llm {
+namespace trt_allreduce {
 namespace common {
 
 Tensor::Tensor()
@@ -396,4 +396,4 @@ void TensorMap::saveNpy(const std::string& base_folder) {
 }
 
 }  // namespace common
-}  // namespace tensorrt_llm
+}  // namespace trt_allreduce

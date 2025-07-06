@@ -18,7 +18,7 @@
 
 #include "common/assert.h"
 
-namespace tensorrt_llm::common {
+namespace trt_allreduce::common {
 
 namespace {
 std::string vformat(char const* fmt, va_list args) {
@@ -45,4 +45,4 @@ std::string fmtstr(char const* format, ...) {
     return result;
 };
 
-}  // namespace tensorrt_llm::common
+}  // namespace trt_allreduce::common

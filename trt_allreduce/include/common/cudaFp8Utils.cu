@@ -20,7 +20,7 @@
 #include "common/cudaUtils.h"
 #include "common/reduceKernelUtils.cuh"
 
-namespace tensorrt_llm {
+namespace trt_allreduce {
 namespace common {
 #ifdef ENABLE_FP8
 
@@ -334,4 +334,4 @@ DEFINE_INVOKE_QUANTIZE_MATRIX(__nv_bfloat16, __nv_bfloat16, __nv_fp8_e4m3);
 
 #endif  // ENABLE_FP8
 }  // namespace common
-}  // namespace tensorrt_llm
+}  // namespace trt_allreduce

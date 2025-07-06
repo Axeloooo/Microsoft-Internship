@@ -18,9 +18,9 @@
 
 #include "common/stringUtils.h"
 
-#define NEW_TLLM_EXCEPTION(...) tensorrt_llm::common::TllmException(__FILE__, __LINE__, tensorrt_llm::common::fmtstr(__VA_ARGS__))
+#define NEW_TLLM_EXCEPTION(...) trt_allreduce::common::TllmException(__FILE__, __LINE__, trt_allreduce::common::fmtstr(__VA_ARGS__))
 
-namespace tensorrt_llm::common {
+namespace trt_allreduce::common {
 
 class TllmException : public std::runtime_error {
    public:
@@ -39,4 +39,4 @@ class TllmException : public std::runtime_error {
     int mNbFrames;
 };
 
-}  // namespace tensorrt_llm::common
+}  // namespace trt_allreduce::common

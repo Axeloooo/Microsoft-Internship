@@ -29,7 +29,7 @@
 
 namespace cg = cooperative_groups;
 
-namespace tensorrt_llm {
+namespace trt_allreduce {
 namespace common {
 
 template <int VPT>
@@ -333,4 +333,4 @@ __device__ __forceinline__ half clamp_inf_for_half(const float input) {
 }
 
 }  // namespace common
-}  // namespace tensorrt_llm
+}  // namespace trt_allreduce

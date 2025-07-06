@@ -45,22 +45,15 @@ CudaTimer::~CudaTimer() {
 void CudaTimer::Start() { CUDA_CHECK(cudaEventRecord(start_event_)); }
 
 /**
- * @brief Stop the timer and calculate the elapsed time.
+ * @brief Stop the timer and return the elapsed time in milliseconds.
  *
+ * @return float
  */
-void CudaTimer::Stop() {
+float CudaTimer::Stop() {
     CUDA_CHECK(cudaEventRecord(stop_event_));
     CUDA_CHECK(cudaEventSynchronize(stop_event_));
     CUDA_CHECK(cudaEventElapsedTime(&elapsed_ms_, start_event_, stop_event_));
-}
-
-/**
- * @brief Print the results of the timer.
- *
- */
-void CudaTimer::Print() const {
-    std::cout << label_ << ":" << std::endl;
-    std::cout << "Latency: " << elapsed_ms_ << " ms" << std::endl;
+    return elapsed_ms_;
 }
 
 }  // namespace trt_allreduce::utils

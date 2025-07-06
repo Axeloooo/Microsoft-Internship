@@ -30,7 +30,7 @@
 #include "common/logger.h"
 #include "common/stringUtils.h"
 
-namespace tensorrt_llm {
+namespace trt_allreduce {
 namespace common {
 
 typedef enum datatype_enum {
@@ -499,4 +499,4 @@ class TensorMap {
 };
 
 }  // namespace common
-}  // namespace tensorrt_llm
+}  // namespace trt_allreduce

@@ -22,7 +22,7 @@
 #include <cuda_bf16.h>
 #endif
 
-namespace tensorrt_llm {
+namespace trt_allreduce {
 namespace common {
 
 template <typename T>
@@ -569,4 +569,4 @@ __device__ inline __nv_fp8_e4m3 cuda_cast<__nv_fp8_e4m3, int8_t>(int8_t val) {
 #endif  // ENABLE_FP8
 
 }  // namespace common
-}  // namespace tensorrt_llm
+}  // namespace trt_allreduce

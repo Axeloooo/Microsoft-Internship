@@ -24,7 +24,7 @@
 #define USE_QGMMA
 #endif
 
-namespace tensorrt_llm {
+namespace trt_allreduce {
 namespace common {
 
 constexpr float FP8_E4M3_MAX = 448.0f;
@@ -190,5 +190,5 @@ void invokeComputeScalesAndQuantizeMatrix(T_OUT* output, T_S* quant_ptr, const T
                                           cudaStream_t stream);
 
 }  // namespace common
-}  // namespace tensorrt_llm
+}  // namespace trt_allreduce
 #endif  // ENABLE_FP8

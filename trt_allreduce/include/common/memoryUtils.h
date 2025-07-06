@@ -17,7 +17,7 @@
 #include "common/cudaUtils.h"
 #include "common/tensor.h"
 
-namespace tensorrt_llm {
+namespace trt_allreduce {
 namespace common {
 
 template <typename T>
@@ -226,4 +226,4 @@ template <typename T>
 bool invokeCheckRange(const T* buffer, const size_t size, T min, T max, bool* d_within_range, cudaStream_t stream);
 
 }  // namespace common
-}  // namespace tensorrt_llm
+}  // namespace trt_allreduce

@@ -19,7 +19,7 @@
 #endif
 #include <sstream>
 
-namespace tensorrt_llm::common {
+namespace trt_allreduce::common {
 
 namespace {
 int constexpr VOID_PTR_SZ = 2 + sizeof(void*) * 2;
@@ -77,4 +77,4 @@ std::string TllmException::demangle(char const* name) {
 #endif
 }
 
-}  // namespace tensorrt_llm::common
+}  // namespace trt_allreduce::common
