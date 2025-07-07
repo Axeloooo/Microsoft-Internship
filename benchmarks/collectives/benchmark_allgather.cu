@@ -29,6 +29,9 @@ constexpr unsigned int kBytes = kN * sizeof(float);
  * @return int
  */
 int main(int argc, char *argv[]) {
+    // Set random seed for reproducibility
+    srand(42);
+
     CollectiveComm mccl_comm;
     Init(argc, argv, &mccl_comm);
 

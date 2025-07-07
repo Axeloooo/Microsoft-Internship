@@ -42,7 +42,7 @@ collective: build
 	    exit 1; \
 	fi
 	@echo ">>> Running collective ./$(BUILD_DIR)/$(TARGET)"
-	@mpirun -np 8 ./$(BUILD_DIR)/$(TARGET)
+	@mpirun -np 8 ./$(BUILD_DIR)/$(TARGET) 
 
 # -------------------------------------------------------------
 test: build

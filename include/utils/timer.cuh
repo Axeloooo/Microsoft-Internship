@@ -9,8 +9,7 @@
  *
  */
 
-#ifndef TIMER_CUH
-#define TIMER_CUH
+#pragma once
 
 #include <cuda_runtime.h>
 
@@ -72,5 +71,3 @@ class CudaTimer {
      */
     void Print() const;
 };
-
-#endif

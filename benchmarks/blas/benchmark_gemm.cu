@@ -38,6 +38,9 @@ void sgemmCpu(const int m, const int n, const int k, const float alpha, const fl
 }
 
 int main() {
+    // Set random seed for reproducibility
+    srand(42);
+
     // Initialize cuBLAS
     cublasHandle_t cublasHandle;
     CHECK_CUBLAS(cublasCreate(&cublasHandle));

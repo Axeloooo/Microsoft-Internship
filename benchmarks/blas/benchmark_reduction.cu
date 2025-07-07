@@ -35,6 +35,9 @@ void reductionCpu(const int *h_in_data, int *h_out_data, const unsigned int n) {
 }
 
 int main() {
+    // Set random seed for reproducibility
+    srand(42);
+
     const unsigned int N = 4194304;
     const unsigned int BLOCK_SIZE = 256;
 

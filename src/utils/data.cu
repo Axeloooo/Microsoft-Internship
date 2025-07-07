@@ -9,6 +9,7 @@
  *
  */
 
+#include <cuda_fp16.h>
 #include <cuda_runtime.h>
 
 #include <cmath>
@@ -28,9 +29,9 @@
  */
 template <typename T>
 void InitVector(T *vector, const unsigned int &n) {
-    srand(42);
-    for (unsigned int i = 0; i < n; i++) {
-        vector[i] = static_cast<T>(rand()) / RAND_MAX;
+    for (unsigned int i = 0; i < n; ++i) {
+        float val = static_cast<float>(rand()) / RAND_MAX;
+        vector[i] = static_cast<T>(val);
     }
 }
 
@@ -44,7 +45,6 @@ void InitVector(T *vector, const unsigned int &n) {
  */
 template <typename T>
 void InitializeMatrix(T *matrix, const unsigned int &rows, const unsigned int &cols) {
-    srand(42);
     for (unsigned int i = 0; i < rows * cols; ++i) {
         matrix[i] = static_cast<T>(rand()) / RAND_MAX;
     }
@@ -116,6 +116,7 @@ void VerifyCollective(const std::string &label, const T *d_buff, const std::vect
     std::cout << "Rank " << rank << " " << label << " : " << (ok ? "PASS" : "FAIL") << std::endl;
 }
 
+template void InitVector<__half>(__half *vector, const unsigned int &n);
 template void InitVector<float>(float *vector, const unsigned int &n);
 template void InitVector<int>(int *vector, const unsigned int &n);
 
