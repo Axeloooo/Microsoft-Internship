@@ -16,7 +16,7 @@
 namespace trt_allreduce::utils {
 
 /**
- * @brief Construct a new Csv Writer:: Csv Writer object
+ * @brief Construct a new Csv Writer object
  *
  * @param path Path to the CSV file.
  * @param with_header Whether to write the header row.
@@ -31,7 +31,7 @@ CsvWriter::CsvWriter(const std::string& path, bool with_header) : file_(path, st
 }
 
 /**
- * @brief Destroy the Csv Writer:: Csv Writer object
+ * @brief Destroy the Csv Writer object
  *
  */
 CsvWriter::~CsvWriter() {
