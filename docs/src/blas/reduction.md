@@ -1,3 +1,3 @@
-# Reduction Kernbel
+# Reduction Kernel
 
 ---

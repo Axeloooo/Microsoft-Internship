@@ -1,122 +1,98 @@
-#!/bin/bash
-
+#!/usr/bin/env bash
+#
 # Plot script for TRT AllReduce benchmark results
+set -euo pipefail
 
-set -e
-
-# Get the directory where this script is located
+# Locate this script and project root
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-# Get the project root directory (parent of scripts)
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 
-# Default parameters
+# Defaults
 DATA_DIR="$PROJECT_ROOT/data"
-OUTPUT_DIR="$PROJECT_ROOT/plots"
 CSV_FILE=""
 
-# Print usage information
 usage() {
-  echo "Usage: $0 [-f <csv_file>] [-d <data_dir>] [-o <output_dir>] [-h]"
-  echo
-  echo "  -f  Specific CSV file to plot (optional)"
-  echo "  -d  Data directory containing CSV files (default: $DATA_DIR)"
-  echo "  -o  Output directory for plots (default: $OUTPUT_DIR)"
-  echo "  -h  Show this help message"
-  echo
-  echo "Examples:"
-  echo "  $0                                    # Plot all CSV files in data/"
-  echo "  $0 -f data/benchmark_fp32.csv        # Plot specific CSV file"
-  echo "  $0 -d /path/to/csv/files             # Plot all CSV files in custom directory"
+  cat <<EOF
+Usage: $(basename "$0") [-f <csv_file>] [-d <data_dir>] [-h]
+
+  -f  Specific CSV file to plot (optional; looks in <data_dir> if no path)
+  -d  Data directory containing CSV files (default: $DATA_DIR)
+  -h  Show this help message
+EOF
   exit 1
 }
 
-# Parse command-line options
-while getopts ":f:d:o:h" opt; do
-  case ${opt} in
-    f ) CSV_FILE="$OPTARG" ;;
-    d ) DATA_DIR="$OPTARG" ;;
-    o ) OUTPUT_DIR="$OPTARG" ;;
-    h ) usage ;;
-    * ) usage ;;
+# Parse options
+while getopts ":f:d:h" opt; do
+  case "$opt" in
+    f) CSV_FILE="$OPTARG" ;;
+    d) DATA_DIR="$OPTARG" ;;
+    h|*) usage ;;
   esac
 done
 
-# Set matplotlib config directory to avoid permission issues
-export MPLCONFIGDIR="/tmp/matplotlib-$(whoami)"
+# Avoid matplotlib config permission issues
+export MPLCONFIGDIR="/tmp/matplotlib-$(id -u)"
 mkdir -p "$MPLCONFIGDIR"
 
-# Check if Python 3 is available
-if ! command -v python3 &> /dev/null; then
-    echo "Error: Python 3 is not installed or not in PATH"
-    exit 1
+# Ensure python3 exists
+if ! command -v python3 &>/dev/null; then
+  echo "Error: python3 not found in PATH" >&2
+  exit 1
 fi
 
-# Check if the Python plotting script exists
-PLOT_SCRIPT="$PROJECT_ROOT/python/plot_benchmark.py"
+# Locate the Python plotting script
+PLOT_DIR="$PROJECT_ROOT/python"
+PLOT_SCRIPT="$PLOT_DIR/plot_benchmark.py"
 if [[ ! -f "$PLOT_SCRIPT" ]]; then
-    echo "Error: Plot script not found: $PLOT_SCRIPT"
-    exit 1
+  echo "Error: plot script not found at $PLOT_SCRIPT" >&2
+  exit 1
 fi
 
-# Install Python requirements if needed
-REQUIREMENTS_FILE="$PROJECT_ROOT/python/requirements.txt"
-if [[ -f "$REQUIREMENTS_FILE" ]]; then
-    echo ">>> Installing Python requirements..."
-    pip3 install -r "$REQUIREMENTS_FILE" --user --quiet || {
-        echo "Warning: Could not install Python requirements"
-        echo "You may need to install them manually:"
-        echo "  pip3 install -r $REQUIREMENTS_FILE --user"
-    }
+# (Optional) install requirements quietly
+REQ="$PLOT_DIR/requirements.txt"
+if [[ -f "$REQ" ]]; then
+  echo ">>> Installing Python requirements..."
+  python3 -m pip install --user --quiet -r "$REQ" || true
 fi
 
 echo "=================================="
-echo "TRT AllReduce Plotting"
+echo "  TRT AllReduce Plotting"
 echo "=================================="
 
-# Check what to plot
+# Build list of CSVs
 if [[ -n "$CSV_FILE" ]]; then
-    # Plot specific CSV file
-    if [[ ! -f "$CSV_FILE" ]]; then
-        echo "Error: CSV file not found: $CSV_FILE"
-        exit 1
-    fi
-    echo ">>> Plotting specific file: $CSV_FILE"
-    echo ">>> Output directory: $OUTPUT_DIR"
-    
-    cd "$PROJECT_ROOT"
-    python3 "$PLOT_SCRIPT" "$(dirname "$CSV_FILE")" --save-plots --output-dir "$OUTPUT_DIR" --file "$(basename "$CSV_FILE")"
+  # if no path, look in DATA_DIR
+  if [[ ! -f "$CSV_FILE" && -f "$DATA_DIR/$CSV_FILE" ]]; then
+    CSV_FILE="$DATA_DIR/$CSV_FILE"
+  fi
+  if [[ ! -f "$CSV_FILE" ]]; then
+    echo "Error: CSV file not found: $CSV_FILE" >&2
+    exit 1
+  fi
+  csvs=( "$CSV_FILE" )
 else
-    # Plot all CSV files in data directory
-    if [[ ! -d "$DATA_DIR" ]]; then
-        echo "Error: Data directory not found: $DATA_DIR"
-        exit 1
-    fi
-    
-    # Check if there are any CSV files
-    if ! ls "$DATA_DIR"/*.csv &> /dev/null; then
-        echo "Error: No CSV files found in: $DATA_DIR"
-        echo "Run the benchmark first using: scripts/benchmark.sh"
-        exit 1
-    fi
-    
-    echo ">>> Plotting all CSV files in: $DATA_DIR"
-    echo ">>> Output directory: $OUTPUT_DIR"
-    
-    cd "$PROJECT_ROOT"
-    python3 "$PLOT_SCRIPT" "$DATA_DIR" --save-plots --output-dir "$OUTPUT_DIR"
+  # all CSVs in DATA_DIR
+  if [[ ! -d "$DATA_DIR" ]]; then
+    echo "Error: data dir not found: $DATA_DIR" >&2
+    exit 1
+  fi
+  shopt -s nullglob
+  mapfile -t csvs < <(printf '%s\n' "$DATA_DIR"/*.csv)
+  if (( ${#csvs[@]} == 0 )); then
+    echo "Error: no CSV files in $DATA_DIR" >&2
+    echo "Run the benchmark first: scripts/benchmark.sh" >&2
+    exit 1
+  fi
 fi
+
+# Change into the python directory so that `../images/` maps to project_root/images
+cd "$PLOT_DIR"
+
+for csv in "${csvs[@]}"; do
+  echo ">>> Plotting: $csv"
+  python3 "$PLOT_SCRIPT" --csv "$csv"
+done
 
 echo "=================================="
-echo ">>> Plotting completed successfully!"
-if [[ -d "$OUTPUT_DIR" ]]; then
-    echo ">>> Plots saved in: $OUTPUT_DIR"
-    ls -la "$OUTPUT_DIR"/ 2>/dev/null || echo "No plots found"
-else
-    echo ">>> No plots directory found"
-fi
-
-if [[ "$SAVE_PLOTS" -eq 1 ]]; then
-  echo ">>> Plots saved to: $OUTPUT_DIR"
-fi
-
-echo ">>> Visualization complete!"
+echo ">>> Done! Plots saved under: $PROJECT_ROOT/images"
