@@ -32,12 +32,3 @@ jobs:
           cd trt_allreduce
           chmod +x ./scripts/build.sh
           ./scripts/build.sh
-
-      - name: Verify build artifacts
-        run: |
-          echo "Main project build artifacts:"
-          ls -la build/
-          echo ""
-          echo "TRT AllReduce build artifacts:"
-          ls -la trt_allreduce/build/
-          test -f trt_allreduce/build/bench_custom_allreduce

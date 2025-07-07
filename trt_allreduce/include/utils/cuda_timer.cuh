@@ -13,9 +13,6 @@
 
 #include <cuda_runtime.h>
 
-#include <iostream>
-#include <string>
-
 namespace trt_allreduce::utils {
 
 /**
@@ -26,7 +23,6 @@ class CudaTimer {
    private:
     cudaEvent_t start_event_;
     cudaEvent_t stop_event_;
-    std::string label_;
     float elapsed_ms_;
 
    public:
@@ -35,7 +31,7 @@ class CudaTimer {
      *
      * @param label A label for the timer, useful for debugging and logging.
      */
-    CudaTimer(const std::string &label);
+    CudaTimer();
 
     /**
      * @brief Destroy the Cuda Timer object

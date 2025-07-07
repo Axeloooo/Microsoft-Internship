@@ -11,9 +11,6 @@
 
 #include <cuda_runtime.h>
 
-#include <iostream>
-#include <string>
-
 #include "utils/checker.h"
 #include "utils/cuda_timer.cuh"
 
@@ -24,7 +21,7 @@ namespace trt_allreduce::utils {
  *
  * @param label A label for the timer, useful for debugging and logging.
  */
-CudaTimer::CudaTimer(const std::string &label) : label_(label), elapsed_ms_(0.0f) {
+CudaTimer::CudaTimer() : elapsed_ms_(0.0f) {
     CUDA_CHECK(cudaEventCreate(&start_event_));
     CUDA_CHECK(cudaEventCreate(&stop_event_));
 }

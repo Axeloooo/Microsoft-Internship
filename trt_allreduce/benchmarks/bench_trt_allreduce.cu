@@ -265,7 +265,7 @@ BenchmarkResults ValidateResults(void* d_buff, const std::vector<T>& h_golden, c
  * @return BenchmarkResults
  */
 BenchmarkResults BenchmarkNccl(void* d_sendbuff, void* d_recvbuff, std::size_t n_elts, const BenchmarkConfig& config) {
-    CudaTimer timer(kNcclLabel);
+    CudaTimer timer();
     float total_time = 0.0f;
 
     for (int iter = 0; iter < config.iterations; ++iter) {
@@ -299,7 +299,7 @@ BenchmarkResults BenchmarkNccl(void* d_sendbuff, void* d_recvbuff, std::size_t n
  */
 BenchmarkResults BenchmarkOneshot(void* d_sendbuff, void* d_recvbuff, std::size_t n_elts, const AllReduceParams& params, const BenchmarkConfig& config,
                                   uint32_t& barrier_counter) {
-    CudaTimer timer(kOneShotLabel);
+    CudaTimer timer();
     float total_time = 0.0f;
 
     for (int iter = 0; iter < config.iterations; ++iter) {
@@ -338,7 +338,7 @@ BenchmarkResults BenchmarkOneshot(void* d_sendbuff, void* d_recvbuff, std::size_
  */
 BenchmarkResults BenchmarkTwoshot(void* d_sendbuff, void* d_recvbuff, std::size_t n_elts, const AllReduceParams& params, const BenchmarkConfig& config,
                                   uint32_t& barrier_counter) {
-    CudaTimer timer(kTwoShotLabel);
+    CudaTimer timer();
     float total_time = 0.0f;
 
     for (int iter = 0; iter < config.iterations; ++iter) {
