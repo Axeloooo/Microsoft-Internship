@@ -19,9 +19,8 @@ namespace trt_allreduce::utils {
 /**
  * @brief Construct a new Cuda Timer:: Cuda Timer object
  *
- * @param label A label for the timer, useful for debugging and logging.
  */
-CudaTimer::CudaTimer() : elapsed_ms_(0.0f) {
+CudaTimer::CudaTimer() {
     CUDA_CHECK(cudaEventCreate(&start_event_));
     CUDA_CHECK(cudaEventCreate(&stop_event_));
 }
@@ -49,8 +48,9 @@ void CudaTimer::Start() { CUDA_CHECK(cudaEventRecord(start_event_)); }
 float CudaTimer::Stop() {
     CUDA_CHECK(cudaEventRecord(stop_event_));
     CUDA_CHECK(cudaEventSynchronize(stop_event_));
-    CUDA_CHECK(cudaEventElapsedTime(&elapsed_ms_, start_event_, stop_event_));
-    return elapsed_ms_;
+    float ms;
+    CUDA_CHECK(cudaEventElapsedTime(&ms, start_event_, stop_event_));
+    return ms;
 }
 
 }  // namespace trt_allreduce::utils

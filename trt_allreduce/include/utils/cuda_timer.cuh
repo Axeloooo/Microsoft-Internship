@@ -23,13 +23,11 @@ class CudaTimer {
    private:
     cudaEvent_t start_event_;
     cudaEvent_t stop_event_;
-    float elapsed_ms_;
 
    public:
     /**
      * @brief Construct a new Cuda Timer object
      *
-     * @param label A label for the timer, useful for debugging and logging.
      */
     CudaTimer();
 

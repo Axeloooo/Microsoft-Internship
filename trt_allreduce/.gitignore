@@ -5,5 +5,7 @@
 *.cubin
 *.fatbin
 
+/data
+/images
 /build
 /.vscode

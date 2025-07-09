@@ -13,7 +13,7 @@ PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 BUILD_DIR="$PROJECT_ROOT/build"
 NP=8
 DTYPE="fp32"
-ITERS=10
+ITERS=1
 
 # Print usage information
 usage() {
