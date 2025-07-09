@@ -29,6 +29,12 @@ class CudaTimer {
     /**
      * @brief Construct a new Cuda Timer object
      *
+     */
+    CudaTimer();
+
+    /**
+     * @brief Construct a new Cuda Timer object
+     *
      * @param stream The CUDA stream to associate with the timer. If not provided, the default stream will be used.
      */
     CudaTimer(cudaStream_t stream);
