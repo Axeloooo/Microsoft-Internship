@@ -19,9 +19,9 @@ namespace trt_allreduce::utils {
 /**
  * @brief Construct a new Cuda Timer:: Cuda Timer object
  *
- * @param label A label for the timer, useful for debugging and logging.
+ * @param stream The CUDA stream to associate with the timer. If not provided, the default stream will be used.
  */
-CudaTimer::CudaTimer() : elapsed_ms_(0.0f) {
+CudaTimer::CudaTimer(cudaStream_t stream) : stream_(stream) {
     CUDA_CHECK(cudaEventCreate(&start_event_));
     CUDA_CHECK(cudaEventCreate(&stop_event_));
 }
@@ -39,7 +39,7 @@ CudaTimer::~CudaTimer() {
  * @brief Start the timer.
  *
  */
-void CudaTimer::Start() { CUDA_CHECK(cudaEventRecord(start_event_)); }
+void CudaTimer::Start() { CUDA_CHECK(cudaEventRecord(start_event_, stream_)); }
 
 /**
  * @brief Stop the timer and return the elapsed time in milliseconds.
@@ -47,10 +47,11 @@ void CudaTimer::Start() { CUDA_CHECK(cudaEventRecord(start_event_)); }
  * @return float
  */
 float CudaTimer::Stop() {
-    CUDA_CHECK(cudaEventRecord(stop_event_));
+    CUDA_CHECK(cudaEventRecord(stop_event_, stream_));
     CUDA_CHECK(cudaEventSynchronize(stop_event_));
-    CUDA_CHECK(cudaEventElapsedTime(&elapsed_ms_, start_event_, stop_event_));
-    return elapsed_ms_;
+    float ms;
+    CUDA_CHECK(cudaEventElapsedTime(&ms, start_event_, stop_event_));
+    return ms;
 }
 
 }  // namespace trt_allreduce::utils
