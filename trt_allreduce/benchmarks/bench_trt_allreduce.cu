@@ -273,16 +273,16 @@ BenchmarkResults BenchmarkNccl(void* d_sendbuff, void* d_recvbuff, std::size_t n
         CUDA_CHECK(cudaStreamSynchronize(config.stream));
     }
 
-    CudaTimer timer(config.stream);
+    CudaTimer timer;
     float total_time = 0.0f;
 
     // Benchmark iterations
+    timer.Start();
     for (int iter = 0; iter < config.iterations; ++iter) {
-        timer.Start();
         NCCL_CHECK(
             ncclAllReduce(d_sendbuff, d_recvbuff, n_elts, (config.dtype == datatype_enum::TYPE_FP32) ? ncclFloat32 : ncclHalf, ncclSum, config.nccl_comm, config.stream));
-        total_time += timer.Stop();
     }
+    total_time = timer.Stop();
 
     BenchmarkResults results{};
     results.implementation = kNcclLabel;
@@ -316,22 +316,22 @@ BenchmarkResults BenchmarkOneshot(void* d_sendbuff, void* d_recvbuff, std::size_
         customAllReduce(wp, d_recvbuff, n_elts, config.element_size, config.dtype, AllReduceStrategyType::ONESHOT, config.stream);
     }
 
-    CudaTimer timer(config.stream);
+    CudaTimer timer;
     float total_time = 0.0f;
 
     // Benchmark iterations
+    timer.Start();
     for (int iter = 0; iter < config.iterations; ++iter) {
         CUDA_CHECK(cudaMemcpyAsync(params.peer_comm_buffer_ptrs[config.local_rank], d_sendbuff, n_elts * config.element_size, cudaMemcpyDeviceToDevice, config.stream));
 
         AllReduceParams iter_params = params;
         iter_params.barrier_flag = barrier_counter++;
 
-        timer.Start();
         invokeMultiGpuBarrier(iter_params, config.stream);
 
         customAllReduce(iter_params, d_recvbuff, n_elts, config.element_size, config.dtype, AllReduceStrategyType::ONESHOT, config.stream);
-        total_time += timer.Stop();
     }
+    total_time += timer.Stop();
 
     BenchmarkResults results{};
     results.implementation = kOneShotLabel;
@@ -365,22 +365,22 @@ BenchmarkResults BenchmarkTwoshot(void* d_sendbuff, void* d_recvbuff, std::size_
         customAllReduce(wp, d_recvbuff, n_elts, config.element_size, config.dtype, AllReduceStrategyType::TWOSHOT, config.stream);
     }
 
-    CudaTimer timer(config.stream);
+    CudaTimer timer;
     float total_time = 0.0f;
 
     // Benchmark iterations
+    timer.Start();
     for (int iter = 0; iter < config.iterations; ++iter) {
         CUDA_CHECK(cudaMemcpyAsync(params.peer_comm_buffer_ptrs[config.local_rank], d_sendbuff, n_elts * config.element_size, cudaMemcpyDeviceToDevice, config.stream));
 
         AllReduceParams iter_params = params;
         iter_params.barrier_flag = barrier_counter++;
 
-        timer.Start();
         invokeMultiGpuBarrier(iter_params, config.stream);
 
         customAllReduce(iter_params, d_recvbuff, n_elts, config.element_size, config.dtype, AllReduceStrategyType::TWOSHOT, config.stream);
-        total_time += timer.Stop();
     }
+    total_time += timer.Stop();
 
     BenchmarkResults results{};
     results.implementation = kTwoShotLabel;
@@ -426,18 +426,20 @@ void LaunchBenchmarks(std::vector<int> n_values, const BenchmarkConfig& config, 
             std::cout << "Benchmarking " << current_n_elts << " elements (" << bytes << " Bytes)..." << std::endl;
         }
 
-        // Allocate device memory
         void* d_sendbuff = nullptr;
         void* d_recvbuff = nullptr;
         void* d_comm_buf = nullptr;
         uint32_t* d_barrier_in = nullptr;
         uint32_t* d_barrier_out = nullptr;
 
+        // Allocate device memory
         CUDA_CHECK(cudaMalloc(&d_sendbuff, bytes));
         CUDA_CHECK(cudaMalloc(&d_recvbuff, bytes));
         CUDA_CHECK(cudaMalloc(&d_comm_buf, bytes));
         CUDA_CHECK(cudaMalloc(&d_barrier_in, 1024 * sizeof(uint32_t)));
         CUDA_CHECK(cudaMalloc(&d_barrier_out, 1024 * sizeof(uint32_t)));
+
+        // Set device barrier to zero
         CUDA_CHECK(cudaMemset(d_barrier_in, 0, 1024 * sizeof(uint32_t)));
         CUDA_CHECK(cudaMemset(d_barrier_out, 0, 1024 * sizeof(uint32_t)));
 
