@@ -1,9 +1,9 @@
 /**
  * @file tllmException.h
  * @author Axel Omar Sanchez Peralta (t-axels@microsoft.com)
- * @brief Exception class for TensorRT-LLM, providing detailed error messages and call stack tracing.
+ * @brief Utility functions for exception handling
  * @version 0.1
- * @date 2025-07-03
+ * @date 2025-07-17
  *
  * @copyright Copyright (c) 2025
  *
@@ -16,9 +16,7 @@
 #include <stdexcept>
 #include <string>
 
-#include "common/stringUtils.h"
-
-#define NEW_TLLM_EXCEPTION(...) trt_allreduce::common::TllmException(__FILE__, __LINE__, trt_allreduce::common::fmtstr(__VA_ARGS__))
+#define NEW_TLLM_EXCEPTION(...) trt_allreduce::common::TllmException(__FILE__, __LINE__, trt_allreduce::common::fmtstr(__VA_ARGS__).c_str())
 
 namespace trt_allreduce::common {
 
@@ -26,7 +24,7 @@ class TllmException : public std::runtime_error {
    public:
     static auto constexpr MAX_FRAMES = 128;
 
-    explicit TllmException(char const* file, std::size_t line, std::string const& msg);
+    explicit TllmException(char const* file, std::size_t line, char const* msg);
 
     ~TllmException() noexcept override;
 

@@ -1,9 +1,9 @@
 /**
  * @file cudaBf16Fallbacks.cuh
  * @author Axel Omar Sanchez Peralta (t-axels@microsoft.com)
- * @brief Fallback functions for bfloat16 operations
+ * @brief CUDA BF16 Fallbacks
  * @version 0.1
- * @date 2025-07-03
+ * @date 2025-07-17
  *
  * @copyright Copyright (c) 2025
  *
@@ -179,9 +179,6 @@ inline __device__ __nv_bfloat162 bf16exp2(const __nv_bfloat162 x) {
 
 #if defined(__CUDA_ARCH__) && (__CUDA_ARCH__ < 800)
 #if defined(CUDART_VERSION) && (CUDART_VERSION < 12020)
-inline __device__ __nv_bfloat162 operator*(const __nv_bfloat162 x, const __nv_bfloat162 y) { return bf16hmul2(x, y); };
-
-inline __device__ __nv_bfloat162 operator+(const __nv_bfloat162 x, const __nv_bfloat162 y) { return bf16hadd2(x, y); };
 
 inline __device__ __nv_bfloat162 make_bfloat162(const __nv_bfloat16 x, const __nv_bfloat16 y) {
     __nv_bfloat162 t;
@@ -267,3 +264,15 @@ inline __device__ __nv_bfloat162 bf16hfma2(__nv_bfloat162 a, __nv_bfloat162 b, _
 
 }  // namespace common
 }  // namespace trt_allreduce
+
+// Operator definitions intentionally in global namespace
+namespace {
+#if defined(__CUDA_ARCH__) && (__CUDA_ARCH__ < 800)
+#if defined(CUDART_VERSION) && (CUDART_VERSION < 12020)
+
+inline __device__ __nv_bfloat162 operator*(const __nv_bfloat162 x, const __nv_bfloat162 y) { return trt_allreduce::common::bf16hmul2(x, y); };
+
+inline __device__ __nv_bfloat162 operator+(const __nv_bfloat162 x, const __nv_bfloat162 y) { return trt_allreduce::common::bf16hadd2(x, y); };
+#endif
+#endif
+}  // namespace

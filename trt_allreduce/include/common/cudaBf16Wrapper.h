@@ -1,9 +1,9 @@
 /**
  * @file cudaBf16Wrapper.h
  * @author Axel Omar Sanchez Peralta (t-axels@microsoft.com)
- * @brief A wrapper for CUDA BF16 operations.
+ * @brief Wrapper for CUDA BF16 types
  * @version 0.1
- * @date 2025-07-03
+ * @date 2025-07-17
  *
  * @copyright Copyright (c) 2025
  *

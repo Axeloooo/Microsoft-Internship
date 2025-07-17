@@ -21,6 +21,8 @@ set(CMAKE_CUDA_ARCHITECTURES 90 CACHE STRING "CUDA arch list")
 # ---------------------------------------------------------------
 find_package(MPI          REQUIRED)
 find_package(CUDAToolkit  REQUIRED)
+# Find CUDA driver API library for multicas and driver calls
+find_library(CUDA_DRIVER_LIBRARY NAMES cuda REQUIRED)
 find_library(NCCL_LIB NAMES nccl REQUIRED)
 
 # ---------------------------------------------------------------
@@ -35,14 +37,26 @@ file(GLOB_RECURSE SRC_FILES CONFIGURE_DEPENDS
      ${PROJECT_SOURCE_DIR}/src/*.cu
      ${PROJECT_SOURCE_DIR}/src/*.cpp
      ${PROJECT_SOURCE_DIR}/include/common/*.cpp
-     ${PROJECT_SOURCE_DIR}/include/common/*.cu)
+     ${PROJECT_SOURCE_DIR}/include/common/*.cu
+     ${PROJECT_SOURCE_DIR}/include/runtime/*.cpp
+     ${PROJECT_SOURCE_DIR}/include/runtime/utils/*.cpp
+     ${PROJECT_SOURCE_DIR}/include/runtime/*.cu
+     ${PROJECT_SOURCE_DIR}/include/runtime/utils/*.cu)
 
 add_library(trt_allreduce STATIC ${SRC_FILES})
 
-target_link_libraries(trt_allreduce PUBLIC CUDA::cudart CUDA::cublas MPI::MPI_CXX ${NCCL_LIB})
+target_link_libraries(trt_allreduce PUBLIC
+    CUDA::cudart
+    CUDA::cublas
+    MPI::MPI_CXX
+    ${NCCL_LIB}
+    ${CUDA_DRIVER_LIBRARY})
 
 # Example compile definition often needed for half precision
-target_compile_definitions(trt_allreduce PUBLIC __CUDA_NO_HALF_OPERATORS__ ENABLE_BF16)
+target_compile_definitions(trt_allreduce PUBLIC __CUDA_NO_HALF_OPERATORS__ ENABLE_BF16 ENABLE_MULTI_DEVICE ENABLE_FP8)
+
+# Add CUDA compiler flags for relaxed constexpr
+target_compile_options(trt_allreduce PRIVATE $<$<COMPILE_LANGUAGE:CUDA>:--expt-relaxed-constexpr>)
 
 # Ensure all executables go to the build root for easy access
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${PROJECT_BINARY_DIR})

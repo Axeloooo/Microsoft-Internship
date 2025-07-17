@@ -1,9 +1,9 @@
 /**
  * @file tllmException.cpp
  * @author Axel Omar Sanchez Peralta (t-axels@microsoft.com)
- * @brief Exception class for TensorRT-LLM, providing detailed stack traces and demangling of function names.
+ * @brief Utility functions for exception handling
  * @version 0.1
- * @date 2025-07-03
+ * @date 2025-07-17
  *
  * @copyright Copyright (c) 2025
  *
@@ -12,6 +12,8 @@
 #include "common/tllmException.h"
 
 #include <cstdlib>
+
+#include "common/stringUtils.h"
 #if !defined(_MSC_VER)
 #include <cxxabi.h>
 #include <dlfcn.h>
@@ -27,16 +29,16 @@ int constexpr VOID_PTR_SZ = 2 + sizeof(void*) * 2;
 
 #if !defined(_MSC_VER)
 
-TllmException::TllmException(char const* file, std::size_t line, const std::string& msg) : std::runtime_error{""} {
+TllmException::TllmException(char const* file, std::size_t line, char const* msg) : std::runtime_error{""} {
     mNbFrames = backtrace(mCallstack.data(), MAX_FRAMES);
     auto const trace = getTrace();
-    std::runtime_error::operator=(std::runtime_error{fmtstr("%s (%s:%zu)\n%s", msg.c_str(), file, line, trace.c_str())});
+    std::runtime_error::operator=(std::runtime_error{fmtstr("%s (%s:%zu)\n%s", msg, file, line, trace.c_str())});
 }
 #else
-TllmException::TllmException(char const* file, std::size_t line, const std::string& msg) : mNbFrames{}, std::runtime_error{fmtstr("%s (%s:%zu)", msg.c_str(), file, line)} {}
+TllmException::TllmException(char const* file, std::size_t line, char const* msg) : mNbFrames{}, std::runtime_error{fmtstr("%s (%s:%zu)", msg, file, line)} {}
 #endif
 
-TllmException::~TllmException() = default;
+TllmException::~TllmException() noexcept = default;
 
 std::string TllmException::getTrace() const {
 #if defined(_MSC_VER)
