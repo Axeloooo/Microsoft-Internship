@@ -22,7 +22,7 @@ jobs:
       - name: Install system dependencies
         run: |
           apt-get update
-          apt-get install -y cmake build-essential
+          apt-get install -y cmake build-essential libnvidia-cuda-dev
 
       - name: Build main project
         run: make build
