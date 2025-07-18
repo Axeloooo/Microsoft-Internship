@@ -328,19 +328,18 @@ BenchmarkResults BenchmarkOneshot(void* d_sendbuff, void* d_recvbuff, std::size_
         customAllReduce(p, cfg.dtype, AllReduceStrategyType::ONESHOT, static_cast<AllReduceStrategyConfig>(0), AllReduceFusionOp::NONE, cfg.stream);
     }
 
+    AllReduceParams p = MakeParams(d_sendbuff, d_recvbuff, n_elts, cfg, peer_comm_ptrs, peer_barrier_in_ptrs, peer_barrier_out_ptrs, barrier_counter++);
+
     CudaTimer timer;
     timer.Start();
-    for (int it = 0; it < cfg.iterations; ++it) {
-        AllReduceParams p = MakeParams(d_sendbuff, d_recvbuff, n_elts, cfg, peer_comm_ptrs, peer_barrier_in_ptrs, peer_barrier_out_ptrs, barrier_counter++);
-        customAllReduce(p, cfg.dtype, AllReduceStrategyType::ONESHOT, static_cast<AllReduceStrategyConfig>(0), AllReduceFusionOp::NONE, cfg.stream);
-    }
+    customAllReduce(p, cfg.dtype, AllReduceStrategyType::ONESHOT, static_cast<AllReduceStrategyConfig>(0), AllReduceFusionOp::NONE, cfg.stream);
     float total_time = timer.Stop();
 
     BenchmarkResults r{};
     r.implementation = kOneShotLabel;
     r.num_elements = n_elts;
     r.message_bytes = n_elts * cfg.element_size;
-    r.latency_ms = total_time / static_cast<float>(cfg.iterations);
+    r.latency_ms = total_time;
     r.bandwidth_gbps = CalculateBandwidth(r.message_bytes, r.latency_ms);
     return r;
 }
@@ -371,19 +370,18 @@ BenchmarkResults BenchmarkTwoshot(void* d_sendbuff, void* d_recvbuff, std::size_
         customAllReduce(p, cfg.dtype, AllReduceStrategyType::TWOSHOT, static_cast<AllReduceStrategyConfig>(0), AllReduceFusionOp::NONE, cfg.stream);
     }
 
+    AllReduceParams p = MakeParams(d_sendbuff, d_recvbuff, n_elts, cfg, peer_comm_ptrs, peer_barrier_in_ptrs, peer_barrier_out_ptrs, barrier_counter++);
+
     CudaTimer timer;
     timer.Start();
-    for (int it = 0; it < cfg.iterations; ++it) {
-        AllReduceParams p = MakeParams(d_sendbuff, d_recvbuff, n_elts, cfg, peer_comm_ptrs, peer_barrier_in_ptrs, peer_barrier_out_ptrs, barrier_counter++);
-        customAllReduce(p, cfg.dtype, AllReduceStrategyType::TWOSHOT, static_cast<AllReduceStrategyConfig>(0), AllReduceFusionOp::NONE, cfg.stream);
-    }
+    customAllReduce(p, cfg.dtype, AllReduceStrategyType::TWOSHOT, static_cast<AllReduceStrategyConfig>(0), AllReduceFusionOp::NONE, cfg.stream);
     float total_time = timer.Stop();
 
     BenchmarkResults r{};
     r.implementation = kTwoShotLabel;
     r.num_elements = n_elts;
     r.message_bytes = n_elts * cfg.element_size;
-    r.latency_ms = total_time / static_cast<float>(cfg.iterations);
+    r.latency_ms = total_time;
     r.bandwidth_gbps = CalculateBandwidth(r.message_bytes, r.latency_ms);
     return r;
 }

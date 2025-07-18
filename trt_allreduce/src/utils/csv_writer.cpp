@@ -26,7 +26,7 @@ CsvWriter::CsvWriter(const std::string& path, bool with_header) : file_(path, st
         throw std::runtime_error("CsvWriter: cannot open " + path);
     }
     if (with_header) {
-        file_ << "implementation,message_bytes,latency_ms,bandwidth_TBps,accuracy_pct,max_abs_error,mean_abs_error,max_rel_error,rmse" << std::endl;
+        file_ << "implementation,message_bytes,latency_ms,bandwidth_GBps,accuracy_pct,max_abs_error,mean_abs_error,max_rel_error,rmse" << std::endl;
     }
 }
 
