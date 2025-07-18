@@ -21,8 +21,6 @@ set(CMAKE_CUDA_ARCHITECTURES 90 CACHE STRING "CUDA arch list")
 # ---------------------------------------------------------------
 find_package(MPI          REQUIRED)
 find_package(CUDAToolkit  REQUIRED)
-# Find CUDA driver API library for multicas and driver calls
-find_library(CUDA_DRIVER_LIBRARY NAMES cuda REQUIRED)
 find_library(NCCL_LIB NAMES nccl REQUIRED)
 
 # ---------------------------------------------------------------
