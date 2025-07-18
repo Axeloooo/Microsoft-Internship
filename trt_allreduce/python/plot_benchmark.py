@@ -97,8 +97,10 @@ def plot_latency(df: pd.DataFrame) -> None:
     ax.set_ylabel("Latency (µs)")
     ax.set_title("AllReduce Latency vs. Message Size")
 
-    # Disable scientific notation for clarity
-    ax.ticklabel_format(style="plain", axis="x")
+    # Use logarithmic scale for x-axis
+    ax.set_xscale("log")
+
+    # Disable scientific notation on y-axis for clarity
     ax.ticklabel_format(style="plain", axis="y")
 
     ax.grid(True, which="both", linestyle="--", linewidth=0.5)
