@@ -48,7 +48,8 @@ target_link_libraries(trt_allreduce PUBLIC
     CUDA::cublas
     MPI::MPI_CXX
     ${NCCL_LIB}
-    ${CUDA_DRIVER_LIBRARY})
+    ${CUDA_DRIVER_LIBRARY}
+    CUDA::cuda_driver)
 
 # Example compile definition often needed for half precision
 target_compile_definitions(trt_allreduce PUBLIC __CUDA_NO_HALF_OPERATORS__ ENABLE_BF16 ENABLE_MULTI_DEVICE ENABLE_FP8)

@@ -50,7 +50,9 @@ using trt_allreduce::kernels::customAllReduce;
 using trt_allreduce::kernels::ub::allreduce2_userbuff_inplace_launcher;
 using trt_allreduce::kernels::ub::communicator;
 using trt_allreduce::runtime::WorldConfig;
+using trt_allreduce::runtime::ub::ub_allocate;
 using trt_allreduce::runtime::ub::ub_comm;
+using trt_allreduce::runtime::ub::ub_deallocate;
 using trt_allreduce::runtime::ub::ub_get;
 using trt_allreduce::runtime::ub::ub_initialize;
 using trt_allreduce::runtime::ub::ub_is_initialized;
@@ -59,12 +61,19 @@ using trt_allreduce::utils::CsvWriter;
 using trt_allreduce::utils::CudaTimer;
 using trt_allreduce::utils::InitVector;
 
+// -----------------------------------------------------------------------------
+// Put benchmark-related definitions inside the new namespace.
+// -----------------------------------------------------------------------------
+namespace trt_allreduce::benchmark {
+
 // -------------------------------------------------------------------------------------------------
 // Constants
 // -------------------------------------------------------------------------------------------------
 
 constexpr std::size_t kSweepSize = 10240;
 constexpr std::size_t kWarmupIters = 10;
+constexpr double kMilliToSec = 1e-3;
+constexpr double kBytesToGigabytes = 1e-9;
 constexpr char const* kNcclLabel = "NCCL";
 constexpr char const* kOneShotLabel = "One-Shot";
 constexpr char const* kTwoShotLabel = "Two-Shot";
@@ -119,21 +128,31 @@ struct BenchmarkResults {
  * @return std::string
  */
 std::string GenerateTimestamp() {
+    // Get the current time
     std::time_t const now = std::time(nullptr);
+
+    // Convert to local time and format it
     std::tm* const tm_now = std::localtime(&now);
+
+    // Create a string stream to format the time
     std::ostringstream oss;
     oss << std::put_time(tm_now, "%Y%m%d-%H%M%S");
     return oss.str();
 }
 
 /**
- * @brief Calculate bandwidth in GB/s given the number of bytes and latency in milliseconds.
+ * @brief Calculate bandwidth in GB/s given bytes transferred and latency (ms).
  *
- * @param bytes
- * @param latency_ms
+ * @param bytes Number of bytes transferred
+ * @param latency_ms Latency in milliseconds
  * @return double
  */
-double CalculateBandwidth(std::size_t bytes, float latency_ms) { return static_cast<double>(bytes) / (latency_ms * 1e-3) / 1e9; }
+double CalculateBandwidth(std::size_t bytes, float latency_ms) {
+    if (latency_ms <= 0.0F) {
+        return 0.0;
+    }
+    return static_cast<double>(bytes) / (latency_ms * kMilliToSec) * kBytesToGigabytes;
+}
 
 /**
  * @brief Get the Local Rank object
@@ -141,36 +160,49 @@ double CalculateBandwidth(std::size_t bytes, float latency_ms) { return static_c
  * @return int
  */
 int GetLocalRank() {
+    // Obtain the rank in the global communicator (MPI_COMM_WORLD)
     int world_rank;
     MPI_CHECK(MPI_Comm_rank(MPI_COMM_WORLD, &world_rank));
 
-    int color;
+    // Split the communicator by shared memory type to get the local rank
     MPI_Comm node_comm;
     MPI_CHECK(MPI_Comm_split_type(MPI_COMM_WORLD, MPI_COMM_TYPE_SHARED, world_rank, MPI_INFO_NULL, &node_comm));
-    MPI_CHECK(MPI_Comm_rank(node_comm, &color));
+
+    // Get the local rank within the node communicator
+    int local_rank;
+    MPI_CHECK(MPI_Comm_rank(node_comm, &local_rank));
+
+    // Free the node communicator
     MPI_CHECK(MPI_Comm_free(&node_comm));
-    return color;
+
+    return local_rank;
 }
 
 /**
  * @brief Get the Local Size object
  *
  * @tparam T
- * @param local_ptr
- * @param remote_ptrs
- * @param local_rank
- * @param ranks_per_node
+ * @param local_ptr Local pointer to the IPC memory
+ * @param remote_ptrs Vector to hold remote pointers
+ * @param local_rank Local rank of the process
+ * @param ranks_per_node Number of ranks per node
  */
 template <typename T>
 void ShareIpcPtrs(T local_ptr, std::vector<T>& remote_ptrs, int local_rank, int ranks_per_node) {
-    // Gather handles on host using MPI.
+    // Create a vector to hold handles for all ranks
     std::vector<cudaIpcMemHandle_t> handles(ranks_per_node);
+
+    // Create a local handle for the current rank
     cudaIpcMemHandle_t local_handle{};
     CUDA_CHECK(cudaIpcGetMemHandle(&local_handle, static_cast<void*>(local_ptr)));
 
+    // Gather handles on host using MPI
     MPI_CHECK(MPI_Allgather(&local_handle, sizeof(local_handle), MPI_BYTE, handles.data(), sizeof(local_handle), MPI_BYTE, MPI_COMM_WORLD));
 
+    // Resize remote pointers vector to hold pointers for all ranks
     remote_ptrs.resize(ranks_per_node);
+
+    // Open IPC memory handles for all ranks
     for (std::size_t r = 0; r < ranks_per_node; ++r) {
         if (r == local_rank) {
             remote_ptrs[r] = local_ptr;
@@ -190,17 +222,19 @@ void ShareIpcPtrs(T local_ptr, std::vector<T>& remote_ptrs, int local_rank, int 
  * @brief Validate results against a golden reference.
  *
  * @tparam T
- * @param d_buff
- * @param golden
- * @param config
- * @param n_elts
+ * @param d_buff Device buffer containing results
+ * @param golden Golden reference data
+ * @param config Benchmark configuration parameters
+ * @param elements Number of elements to validate
  * @return BenchmarkResults
  */
 template <typename T>
-BenchmarkResults ValidateResults(void* d_buff, std::vector<T> const& golden, BenchmarkConfig const& config, std::size_t n_elts) {
-    std::vector<T> actual(n_elts);
-    CUDA_CHECK(cudaMemcpy(actual.data(), d_buff, n_elts * sizeof(T), cudaMemcpyDeviceToHost));
+BenchmarkResults ValidateResults(void* d_buff, std::vector<T> const& golden, BenchmarkConfig const& config, std::size_t elements) {
+    // Store actual results in a vector
+    std::vector<T> actual(elements);
+    CUDA_CHECK(cudaMemcpy(actual.data(), d_buff, elements * sizeof(T), cudaMemcpyDeviceToHost));
 
+    // Calculate error metrics
     float const eps = std::is_same_v<T, float> ? 1e-5F : 1e-2F;
     std::size_t correct = 0;
     double abs_sum = 0.0;
@@ -208,7 +242,8 @@ BenchmarkResults ValidateResults(void* d_buff, std::vector<T> const& golden, Ben
     float max_abs_err = 0.0F;
     float max_rel_err = 0.0F;
 
-    for (std::size_t i = 0; i < n_elts; ++i) {
+    // Compare actual results with golden reference
+    for (std::size_t i = 0; i < elements; ++i) {
         float diff = static_cast<float>(actual[i]) - static_cast<float>(golden[i]);
         float abs_err = std::fabs(diff);
         abs_sum += abs_err;
@@ -222,14 +257,15 @@ BenchmarkResults ValidateResults(void* d_buff, std::vector<T> const& golden, Ben
         }
     }
 
+    // Calculate results
     BenchmarkResults r{};
-    r.num_elements = n_elts;
-    r.message_bytes = n_elts * config.element_size;
-    r.accuracy_pct = 100.0 * static_cast<double>(correct) / static_cast<double>(n_elts);
+    r.num_elements = elements;
+    r.message_bytes = elements * config.element_size;
+    r.accuracy_pct = 100.0 * static_cast<double>(correct) / static_cast<double>(elements);
     r.max_abs_error = max_abs_err;
-    r.mean_abs_error = abs_sum / static_cast<double>(n_elts);
+    r.mean_abs_error = abs_sum / static_cast<double>(elements);
     r.max_rel_error = max_rel_err;
-    r.rmse = std::sqrt(sq_err_sum / static_cast<double>(n_elts));
+    r.rmse = std::sqrt(sq_err_sum / static_cast<double>(elements));
     return r;
 }
 
@@ -240,40 +276,40 @@ BenchmarkResults ValidateResults(void* d_buff, std::vector<T> const& golden, Ben
 /**
  * @brief Create AllReduceParams structure for the custom all-reduce operation.
  *
- * @param sendbuff
- * @param recvbuff
- * @param n_elts
- * @param cfg
- * @param peer_comm_ptrs
- * @param peer_barrier_in_ptrs
- * @param peer_barrier_out_ptrs
- * @param barrier_flag
+ * @param sendbuff Input data buffer (device memory)
+ * @param recvbuff Output data buffer (device memory)
+ * @param elements Number of elements to reduce
+ * @param config Benchmark configuration parameters
+ * @param peer_comm_ptrs List of peer communication buffer pointers
+ * @param peer_barrier_in_ptrs List of peer barrier input pointers
+ * @param peer_barrier_out_ptrs List of peer barrier output pointers
+ * @param barrier_flag Barrier flag to synchronize peers
  * @return AllReduceParams
  */
-inline AllReduceParams MakeMultiShotParams(void* sendbuff, void* recvbuff, std::size_t n_elts, BenchmarkConfig const& cfg, std::vector<void*> const& peer_comm_ptrs,
+inline AllReduceParams MakeMultiShotParams(void* sendbuff, void* recvbuff, std::size_t elements, BenchmarkConfig const& config, std::vector<void*> const& peer_comm_ptrs,
                                            std::vector<uint32_t*> const& peer_barrier_in_ptrs, std::vector<uint32_t*> const& peer_barrier_out_ptrs, uint32_t barrier_flag) {
+    // Create AllReduceParams structure
     AllReduceParams p{};
-    p.elts_total = n_elts;
-    p.ranks_per_node = static_cast<std::size_t>(cfg.ranks_per_node);
-    p.local_rank = static_cast<std::size_t>(cfg.local_rank);
+    p.elts_total = elements;
+    p.ranks_per_node = static_cast<std::size_t>(config.ranks_per_node);
+    p.local_rank = static_cast<std::size_t>(config.local_rank);
     p.barrier_flag = barrier_flag;
     p.local_input_buffer_ptr = sendbuff;
     p.local_output_buffer_ptr = recvbuff;
 
-    // peer arrays
-    for (std::size_t r = 0; r < cfg.ranks_per_node; ++r) {
+    // Set peer pointers
+    for (std::size_t r = 0; r < config.ranks_per_node; ++r) {
         p.peer_comm_buffer_ptrs[r] = (r < static_cast<int>(peer_comm_ptrs.size())) ? peer_comm_ptrs[r] : nullptr;
         p.peer_barrier_ptrs_in[r] = (r < static_cast<int>(peer_barrier_in_ptrs.size())) ? peer_barrier_in_ptrs[r] : nullptr;
         p.peer_barrier_ptrs_out[r] = (r < static_cast<int>(peer_barrier_out_ptrs.size())) ? peer_barrier_out_ptrs[r] : nullptr;
     }
 
-    // Remaining fields (`elts_per_rank`, `elts_per_block`, `rank_offset`) are computed
-    // inside the kernel launch helper; initialize to zero to be safe.
+    // Set additional parameters
     p.elts_per_rank = 0;
     p.elts_per_block = 0;
     p.rank_offset = 0;
 
-    // Fusion disabled.
+    // Disable fusion
     p.fusion_params = trt_allreduce::kernels::AllReduceFusionParams{};
     p.fusion_params.eps = 0.0F;
     p.fusion_params.hidden_size = 0;
@@ -287,30 +323,35 @@ inline AllReduceParams MakeMultiShotParams(void* sendbuff, void* recvbuff, std::
 /**
  * @brief Run a benchmark using NCCL all-reduce.
  *
- * @param d_sendbuff
- * @param d_recvbuff
- * @param n_elts
- * @param cfg
+ * @param d_sendbuff Input data buffer (device memory)
+ * @param d_recvbuff Output data buffer (device memory)
+ * @param elements Number of elements to reduce
+ * @param config Benchmark configuration parameters
  * @return BenchmarkResults
  */
-BenchmarkResults BenchmarkNccl(void* d_sendbuff, void* d_recvbuff, std::size_t n_elts, BenchmarkConfig const& cfg) {
-    // warmup
+BenchmarkResults BenchmarkNccl(void* d_sendbuff, void* d_recvbuff, std::size_t elements, BenchmarkConfig const& config) {
+    // Warm-up phase
     for (std::size_t i = 0; i < kWarmupIters; ++i) {
-        NCCL_CHECK(ncclAllReduce(d_sendbuff, d_recvbuff, n_elts, (cfg.dtype == nvinfer1::DataType::kFLOAT ? ncclFloat32 : ncclHalf), ncclSum, cfg.nccl_comm, cfg.stream));
+        NCCL_CHECK(
+            ncclAllReduce(d_sendbuff, d_recvbuff, elements, (config.dtype == nvinfer1::DataType::kFLOAT ? ncclFloat32 : ncclHalf), ncclSum, config.nccl_comm, config.stream));
     }
 
+    // Perform NCCL all-reduce
     CudaTimer timer;
     timer.Start();
-    for (std::size_t it = 0; it < cfg.iterations; ++it) {
-        NCCL_CHECK(ncclAllReduce(d_sendbuff, d_recvbuff, n_elts, (cfg.dtype == nvinfer1::DataType::kFLOAT ? ncclFloat32 : ncclHalf), ncclSum, cfg.nccl_comm, cfg.stream));
+    for (std::size_t it = 0; it < config.iterations; ++it) {
+        NCCL_CHECK(
+            ncclAllReduce(d_sendbuff, d_recvbuff, elements, (config.dtype == nvinfer1::DataType::kFLOAT ? ncclFloat32 : ncclHalf), ncclSum, config.nccl_comm, config.stream));
     }
+    CUDA_CHECK(cudaStreamSynchronize(config.stream));
     float total_time = timer.Stop();
 
+    // Store results
     BenchmarkResults r{};
     r.implementation = kNcclLabel;
-    r.num_elements = n_elts;
-    r.message_bytes = n_elts * cfg.element_size;
-    r.latency_ms = total_time / static_cast<float>(cfg.iterations);
+    r.num_elements = elements;
+    r.message_bytes = elements * config.element_size;
+    r.latency_ms = total_time / static_cast<float>(config.iterations);
     r.bandwidth_gbps = CalculateBandwidth(r.message_bytes, r.latency_ms);
     return r;
 }
@@ -322,37 +363,40 @@ BenchmarkResults BenchmarkNccl(void* d_sendbuff, void* d_recvbuff, std::size_t n
 /**
  * @brief Run a benchmark using the custom one-shot all-reduce implementation.
  *
- * @param d_sendbuff
- * @param d_recvbuff
- * @param n_elts
- * @param peer_comm_ptrs
- * @param peer_barrier_in_ptrs
- * @param peer_barrier_out_ptrs
- * @param config
- * @param barrier_counter
+ * @param d_sendbuff Input data buffer (device memory)
+ * @param d_recvbuff Output data buffer (device memory)
+ * @param elements Number of elements to reduce
+ * @param peer_comm_ptrs List of peer communication buffer pointers
+ * @param peer_barrier_in_ptrs List of peer barrier input pointers
+ * @param peer_barrier_out_ptrs List of peer barrier output pointers
+ * @param config Benchmark configuration parameters
+ * @param barrier_counter Barrier counter to synchronize peers
  * @return BenchmarkResults
  */
-BenchmarkResults BenchmarkOneshot(void* d_sendbuff, void* d_recvbuff, std::size_t n_elts, std::vector<void*> const& peer_comm_ptrs,
+BenchmarkResults BenchmarkOneshot(void* d_sendbuff, void* d_recvbuff, std::size_t elements, std::vector<void*> const& peer_comm_ptrs,
                                   std::vector<uint32_t*> const& peer_barrier_in_ptrs, std::vector<uint32_t*> const& peer_barrier_out_ptrs, BenchmarkConfig const& config,
                                   uint32_t& barrier_counter) {
+    // Warm-up phase
     for (std::size_t i = 0; i < kWarmupIters; ++i) {
-        AllReduceParams p = MakeMultiShotParams(d_sendbuff, d_recvbuff, n_elts, config, peer_comm_ptrs, peer_barrier_in_ptrs, peer_barrier_out_ptrs, barrier_counter++);
+        AllReduceParams p = MakeMultiShotParams(d_sendbuff, d_recvbuff, elements, config, peer_comm_ptrs, peer_barrier_in_ptrs, peer_barrier_out_ptrs, barrier_counter++);
         customAllReduce(p, config.dtype, AllReduceStrategyType::ONESHOT, static_cast<AllReduceStrategyConfig>(0), AllReduceFusionOp::NONE, config.stream);
     }
 
+    // Perform One-shot all-reduce
     CudaTimer timer;
     timer.Start();
-
     for (std::size_t it = 0; it < config.iterations; ++it) {
-        AllReduceParams p = MakeMultiShotParams(d_sendbuff, d_recvbuff, n_elts, config, peer_comm_ptrs, peer_barrier_in_ptrs, peer_barrier_out_ptrs, barrier_counter++);
+        AllReduceParams p = MakeMultiShotParams(d_sendbuff, d_recvbuff, elements, config, peer_comm_ptrs, peer_barrier_in_ptrs, peer_barrier_out_ptrs, barrier_counter++);
         customAllReduce(p, config.dtype, AllReduceStrategyType::ONESHOT, static_cast<AllReduceStrategyConfig>(0), AllReduceFusionOp::NONE, config.stream);
     }
+    CUDA_CHECK(cudaStreamSynchronize(config.stream));
     float total_time = timer.Stop();
 
+    // Store results
     BenchmarkResults r{};
     r.implementation = kOneShotLabel;
-    r.num_elements = n_elts;
-    r.message_bytes = n_elts * config.element_size;
+    r.num_elements = elements;
+    r.message_bytes = elements * config.element_size;
     r.latency_ms = total_time / static_cast<float>(config.iterations);
     r.bandwidth_gbps = CalculateBandwidth(r.message_bytes, r.latency_ms);
     return r;
@@ -365,34 +409,36 @@ BenchmarkResults BenchmarkOneshot(void* d_sendbuff, void* d_recvbuff, std::size_
 /**
  * @brief Run a benchmark using the custom two-shot all-reduce implementation.
  *
- * @param d_sendbuff
- * @param d_recvbuff
- * @param n_elts
- * @param peer_comm_ptrs
- * @param peer_barrier_in_ptrs
- * @param peer_barrier_out_ptrs
- * @param config
- * @param barrier_counter
+ * @param d_sendbuff Input data buffer (device memory)
+ * @param d_recvbuff Output data buffer (device memory)
+ * @param elements Number of elements to reduce
+ * @param peer_comm_ptrs List of peer communication buffer pointers
+ * @param peer_barrier_in_ptrs List of peer barrier input pointers
+ * @param peer_barrier_out_ptrs List of peer barrier output pointers
+ * @param config Benchmark configuration parameters
+ * @param barrier_counter Barrier counter to synchronize peers
  * @return BenchmarkResults
  */
 BenchmarkResults BenchmarkTwoshot(void* d_sendbuff, void* d_recvbuff, std::size_t elements, std::vector<void*> const& peer_comm_ptrs,
                                   std::vector<uint32_t*> const& peer_barrier_in_ptrs, std::vector<uint32_t*> const& peer_barrier_out_ptrs, BenchmarkConfig const& config,
                                   uint32_t& barrier_counter) {
+    // Warm-up phase
     for (std::size_t i = 0; i < kWarmupIters; ++i) {
         AllReduceParams p = MakeMultiShotParams(d_sendbuff, d_recvbuff, elements, config, peer_comm_ptrs, peer_barrier_in_ptrs, peer_barrier_out_ptrs, barrier_counter++);
         customAllReduce(p, config.dtype, AllReduceStrategyType::TWOSHOT, static_cast<AllReduceStrategyConfig>(0), AllReduceFusionOp::NONE, config.stream);
     }
 
+    // Perform Two-shot all-reduce
     CudaTimer timer;
     timer.Start();
-
     for (std::size_t it = 0; it < config.iterations; ++it) {
         AllReduceParams p = MakeMultiShotParams(d_sendbuff, d_recvbuff, elements, config, peer_comm_ptrs, peer_barrier_in_ptrs, peer_barrier_out_ptrs, barrier_counter++);
         customAllReduce(p, config.dtype, AllReduceStrategyType::TWOSHOT, static_cast<AllReduceStrategyConfig>(0), AllReduceFusionOp::NONE, config.stream);
     }
-
+    CUDA_CHECK(cudaStreamSynchronize(config.stream));
     float total_time = timer.Stop();
 
+    // Store results
     BenchmarkResults r{};
     r.implementation = kTwoShotLabel;
     r.num_elements = elements;
@@ -402,68 +448,93 @@ BenchmarkResults BenchmarkTwoshot(void* d_sendbuff, void* d_recvbuff, std::size_
     return r;
 }
 
+// -------------------------------------------------------------------------------------------------
+// User-buffer all-reduce
+// -------------------------------------------------------------------------------------------------
+
 /**
  * @brief Run a benchmark using the custom user-buffer all-reduce implementation.
  *
- * @param handler
- * @param elements
- * @param dataType
- * @param comm
- * @param stream
- * @param config
+ * @param d_sendbuff Input data buffer (device memory)
+ * @param d_recvbuff Output data buffer (device memory)
+ * @param elements Number of elements to reduce
+ * @param config Benchmark configuration parameters
+ * @param userbuff User-buffer to use for the all-reduce operation
  * @return BenchmarkResults
  */
-// BenchmarkResults BenchmarkUb(size_t const elements, cudaStream_t stream, BenchmarkConfig config) {
-//     WorldConfig world_config(tp_size, pp_size, cp_size, rank, gpus_per_node) ub_initialize(world_config);
+BenchmarkResults BenchmarkUb(void* d_sendbuff, void* d_recvbuff, std::size_t elements, BenchmarkConfig const& config, UBBuffer& userbuff) {
+    std::size_t bytes = elements * config.element_size;
 
-//     if (!ub_is_initialized()) {
-//         std::cerr << "User-buffers not initialized. Exiting." << std::endl;
-//         return {};
-//     }
+    // Extra safety-check
+    if (userbuff.invalid() || userbuff.size < bytes) {
+        throw std::runtime_error("User-buffer is invalid or too small for current benchmark.");
+    }
 
-//     UBBuffer userbuff = ub_get(0);
-//     communicator* comm = ub_comm();
+    communicator* comm = ub_comm();
 
-//     for (std::size_t i = 0; i < kWarmupIters; ++i) {
-//         allreduce2_userbuff_inplace_launcher(userbuff.handle, 0, elements, nvinfer1::DataType::kHALF, comm, stream);
-//     }
+    // Copy input data to user-buffer (first time, before warm-up)
+    CUDA_CHECK(cudaMemcpyAsync(userbuff.addr, d_sendbuff, bytes, cudaMemcpyDeviceToDevice, config.stream));
 
-//     CudaTimer timer;
-//     timer.Start();
+    // Warm-up phase
+    for (std::size_t i = 0; i < kWarmupIters; ++i) {
+        allreduce2_userbuff_inplace_launcher(userbuff.handle, 0, elements, config.dtype, comm, config.stream);
+    }
 
-//     for (std::size_t it = 0; it < config.iterations; ++it) {
-//         allreduce2_userbuff_inplace_launcher(handler.handle, 0, elements, nvinfer1::DataType::kHALF, comm, stream);
-//     }
+    // Reset buffer after warm-up
+    CUDA_CHECK(cudaMemcpyAsync(userbuff.addr, d_sendbuff, bytes, cudaMemcpyDeviceToDevice, config.stream));
 
-//     float total_time = timer.Stop();
+    // Perform user-buffer all-reduce
+    CudaTimer timer;
+    timer.Start();
+    for (std::size_t it = 0; it < config.iterations; ++it) {
+        CUDA_CHECK(cudaMemcpyAsync(userbuff.addr, d_sendbuff, bytes, cudaMemcpyDeviceToDevice, config.stream));
+        allreduce2_userbuff_inplace_launcher(userbuff.handle, 0, elements, config.dtype, comm, config.stream);
+    }
+    CUDA_CHECK(cudaStreamSynchronize(config.stream));
+    float total_time = timer.Stop();
 
-//     BenchmarkResults r{};
-//     r.implementation = kUbLabel;
-//     r.num_elements = elements;
-//     r.message_bytes = elements * config.element_size;
-//     r.latency_ms = total_time / static_cast<float>(config.iterations);
-//     r.bandwidth_gbps = CalculateBandwidth(r.message_bytes, r.latency_ms);
-//     return r;
-// }
+    // Copy result back for validation
+    CUDA_CHECK(cudaMemcpy(d_recvbuff, userbuff.addr, bytes, cudaMemcpyDeviceToDevice));
+
+    // Store results
+    BenchmarkResults r{};
+    r.implementation = kUbLabel;
+    r.num_elements = elements;
+    r.message_bytes = bytes;
+    r.latency_ms = total_time / static_cast<float>(config.iterations);
+    r.bandwidth_gbps = CalculateBandwidth(bytes, r.latency_ms);
+    return r;
+}
+}  // namespace trt_allreduce::benchmark
 
 // -------------------------------------------------------------------------------------------------
 // main
 // -------------------------------------------------------------------------------------------------
 
+using namespace trt_allreduce::benchmark;
+
 /**
  * @brief Main function for the benchmark.
  *
- * @param argc
- * @param argv
+ * @param argc Argument count
+ * @param argv Argument vector
  * @return int
  */
 int main(int argc, char** argv) {
+    // Initialize random seed for reproducibility
     std::srand(42);
 
+    // Disable [TensorRT-LLM][DEBUG] AllReduceDispatch enabled
+    setenv("TLLM_LOG_LEVEL", "WARNING", 1);
+
+    // Initialize MPI
     MPI_CHECK(MPI_Init(&argc, &argv));
 
+    // Set default hyperparameters
     std::string dtype_s = "fp32";
     int iterations = 10;
+
+    // Parse command line arguments
     for (int i = 1; i < argc; ++i) {
         if (!std::strcmp(argv[i], "--dtype") && i + 1 < argc) {
             dtype_s = argv[++i];
@@ -472,26 +543,35 @@ int main(int argc, char** argv) {
         }
     }
 
+    // Create benchmark configuration
     BenchmarkConfig config{};
     config.dtype = (dtype_s == "fp16") ? nvinfer1::DataType::kHALF : nvinfer1::DataType::kFLOAT;
     config.element_size = getDTypeSize(config.dtype);
     config.iterations = iterations;
 
+    // Set up local and global ranks
     MPI_CHECK(MPI_Comm_size(MPI_COMM_WORLD, &config.world_size));
     MPI_CHECK(MPI_Comm_rank(MPI_COMM_WORLD, &config.world_rank));
     config.local_rank = GetLocalRank();
     config.ranks_per_node = config.world_size;
 
+    // Set CUDA device and create stream
     CUDA_CHECK(cudaSetDevice(config.local_rank));
     CUDA_CHECK(cudaStreamCreate(&config.stream));
 
+    // Get NCCL id
     ncclUniqueId nccl_id;
     if (config.world_rank == 0) {
         NCCL_CHECK(ncclGetUniqueId(&nccl_id));
     }
+
+    // Broadcast NCCL ID to all ranks
     MPI_CHECK(MPI_Bcast(&nccl_id, sizeof(nccl_id), MPI_BYTE, 0, MPI_COMM_WORLD));
+
+    // Initialize NCCL communicator
     NCCL_CHECK(ncclCommInitRank(&config.nccl_comm, config.world_size, nccl_id, config.world_rank));
 
+    // Create directory for results
     std::unique_ptr<CsvWriter> csv_writer;
     if (config.world_rank == 0) {
         std::filesystem::create_directories(kDirectoryPath);
@@ -499,16 +579,24 @@ int main(int argc, char** argv) {
         csv_writer = std::make_unique<CsvWriter>(filename, true);
     }
 
-    // Message size sweep (in multiples of 1024 elements just like original)
+    // Message size sweep
     std::vector<int> n_values;
     for (int n = 1; n < 16; ++n) n_values.push_back(n);
     for (int n = 16; n < 128; n += 16) n_values.push_back(n);
     for (int n = 128; n < 1024; n += 128) n_values.push_back(n);
 
-    // Device buffers used for all message sizes (max allocate)
+    // Calculate maximum number of elements and bytes
     std::size_t const max_n = static_cast<std::size_t>(n_values.back()) * kSweepSize;
     std::size_t const max_bytes = max_n * config.element_size;
 
+    // Initialize user-buffers (fp16 only) and allocate once
+    UBBuffer ubuff;
+    if (config.dtype == nvinfer1::DataType::kHALF) {
+        ub_initialize(config.world_size);
+        ubuff = ub_allocate(max_bytes);
+    }
+
+    // Allocate device buffers for send and receive
     void* d_sendbuff = nullptr;
     void* d_recvbuff = nullptr;
     CUDA_CHECK(cudaMalloc(&d_sendbuff, max_bytes));
@@ -525,7 +613,7 @@ int main(int argc, char** argv) {
         CUDA_CHECK(cudaMemcpy(d_sendbuff, h.data(), max_bytes, cudaMemcpyHostToDevice));
     }
 
-    // Allocate & share peer comm / barrier buffers (each per max size)
+    // Allocate shared memory for communication buffers and barriers
     void* d_comm_buf = nullptr;
     uint32_t* d_barrier_in = nullptr;
     uint32_t* d_barrier_out = nullptr;
@@ -533,6 +621,7 @@ int main(int argc, char** argv) {
     CUDA_CHECK(cudaMalloc(&d_barrier_in, sizeof(uint32_t)));
     CUDA_CHECK(cudaMalloc(&d_barrier_out, sizeof(uint32_t)));
 
+    // Initialize communication buffers and barriers
     std::vector<void*> peer_comm_ptrs;
     std::vector<uint32_t*> peer_barrier_in_ptrs;
     std::vector<uint32_t*> peer_barrier_out_ptrs;
@@ -540,14 +629,20 @@ int main(int argc, char** argv) {
     ShareIpcPtrs(d_barrier_in, peer_barrier_in_ptrs, config.local_rank, config.ranks_per_node);
     ShareIpcPtrs(d_barrier_out, peer_barrier_out_ptrs, config.local_rank, config.ranks_per_node);
 
+    // Set initial barrier values
     uint32_t barrier_counter = 1;
 
+    // Loop over message sizes
     for (int n_mult : n_values) {
+        // Calculate number of elements and bytes for this sweep
         std::size_t const elements = static_cast<std::size_t>(n_mult) * kSweepSize;
         std::size_t const bytes = elements * config.element_size;
 
+        // Create device buffers for this sweep
         std::vector<float> golden_fp32;
         std::vector<__half> golden_fp16;
+
+        // Create a validation results object
         BenchmarkResults val_res{};
 
         if (config.world_rank == 0) {
@@ -557,9 +652,7 @@ int main(int argc, char** argv) {
         // NCCL baseline
         BenchmarkResults nccl_res = BenchmarkNccl(d_sendbuff, d_recvbuff, elements, config);
 
-        // ---------------------------------------------------------------------
-        // Capture NCCL output once – this becomes the golden reference
-        // ---------------------------------------------------------------------
+        // Validate NCCL results and capture golden reference for later validation
         if (config.dtype == nvinfer1::DataType::kFLOAT) {
             golden_fp32.resize(elements);
             CUDA_CHECK(cudaMemcpy(golden_fp32.data(), d_recvbuff, bytes, cudaMemcpyDeviceToHost));
@@ -569,7 +662,8 @@ int main(int argc, char** argv) {
             CUDA_CHECK(cudaMemcpy(golden_fp16.data(), d_recvbuff, bytes, cudaMemcpyDeviceToHost));
             val_res = ValidateResults<__half>(d_recvbuff, golden_fp16, config, elements);
         }
-        // annotate nccl with validation
+
+        // Store NCCL results
         nccl_res.accuracy_pct = val_res.accuracy_pct;
         nccl_res.max_abs_error = val_res.max_abs_error;
         nccl_res.mean_abs_error = val_res.mean_abs_error;
@@ -592,6 +686,8 @@ int main(int argc, char** argv) {
         } else {
             val_res = ValidateResults<__half>(d_recvbuff, golden_fp16, config, elements);
         }
+
+        // Store one-shot results
         oneshot_res.accuracy_pct = val_res.accuracy_pct;
         oneshot_res.max_abs_error = val_res.max_abs_error;
         oneshot_res.mean_abs_error = val_res.mean_abs_error;
@@ -614,6 +710,8 @@ int main(int argc, char** argv) {
         } else {
             val_res = ValidateResults<__half>(d_recvbuff, golden_fp16, config, elements);
         }
+
+        // Store two-shot results
         twoshot_res.accuracy_pct = val_res.accuracy_pct;
         twoshot_res.max_abs_error = val_res.max_abs_error;
         twoshot_res.mean_abs_error = val_res.mean_abs_error;
@@ -626,29 +724,30 @@ int main(int argc, char** argv) {
         }
 
         // Reset and benchmark user-buffers
-        // CUDA_CHECK(cudaMemset(d_recvbuff, 0, bytes));
-        // int handler = 0;
-        // size_t offset = 0;
-        // communicator comm{};
-        // comm.set_stream(config.stream);
-        // comm.set_nccl_comm(config.nccl_comm);
-        // BenchmarkResults ub_res = BenchmarkUb(handler, offset, elements, config.dtype, &comm, config.stream, config);
-        // // Validate user-buffers
-        // if (config.dtype == nvinfer1::DataType::kFLOAT) {
-        //     std::vector<float> golden(elements);
-        //     CUDA_CHECK(cudaMemcpy(golden.data(), d_recvbuff, bytes, cudaMemcpyDeviceToHost));
-        //     val_res = ValidateResults<float>(d_recvbuff, golden, config, elements);
-        // }
-        // ub_res.accuracy_pct = val_res.accuracy_pct;
-        // ub_res.max_abs_error = val_res.max_abs_error;
-        // ub_res.mean_abs_error = val_res.mean_abs_error;
-        // ub_res.max_rel_error = val_res.max_rel_error;
-        // ub_res.rmse = val_res.rmse;
+        if (config.dtype == nvinfer1::DataType::kHALF) {
+            CUDA_CHECK(cudaMemset(d_recvbuff, 0, bytes));
+            BenchmarkResults ub_res = BenchmarkUb(d_sendbuff, d_recvbuff, elements, config, ubuff);
 
-        // if (csv_writer) {
-        //     csv_writer->WriteRow(ub_res.implementation, ub_res.message_bytes, ub_res.latency_ms, ub_res.bandwidth_gbps, ub_res.accuracy_pct, ub_res.max_abs_error,
-        //                          ub_res.mean_abs_error, ub_res.max_rel_error, ub_res.rmse);
-        // }
+            // Validate user-buffers (reuse golden)
+            val_res = ValidateResults<__half>(d_recvbuff, golden_fp16, config, elements);
+
+            // Store user-buffers results
+            ub_res.accuracy_pct = val_res.accuracy_pct;
+            ub_res.max_abs_error = val_res.max_abs_error;
+            ub_res.mean_abs_error = val_res.mean_abs_error;
+            ub_res.max_rel_error = val_res.max_rel_error;
+            ub_res.rmse = val_res.rmse;
+
+            if (csv_writer) {
+                csv_writer->WriteRow(ub_res.implementation, ub_res.message_bytes, ub_res.latency_ms, ub_res.bandwidth_gbps, ub_res.accuracy_pct, ub_res.max_abs_error,
+                                     ub_res.mean_abs_error, ub_res.max_rel_error, ub_res.rmse);
+            }
+        }
+    }
+
+    // Clean-up resources
+    if (config.dtype == nvinfer1::DataType::kHALF) {
+        ub_deallocate(ubuff.addr);
     }
 
     if (csv_writer) {

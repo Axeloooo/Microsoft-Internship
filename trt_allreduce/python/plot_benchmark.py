@@ -7,13 +7,14 @@ figure is saved to the specified output path.
 
 Example
 -------
-python plot_benchmark.py --csv data/benchmarks.csv
+./plot.sh -f benchmarks.csv
 """
 from __future__ import annotations
 
 import argparse
 import pathlib
 import datetime
+from typing import List, Tuple, Set
 
 import matplotlib.pyplot as plt
 import pandas as pd
@@ -58,12 +59,12 @@ def load_data(csv_path: pathlib.Path) -> pd.DataFrame:
         pd.DataFrame: DataFrame containing the benchmark results with columns.
     """
     try:
-        df = pd.read_csv(csv_path)
+        df: pd.DataFrame = pd.read_csv(csv_path)
     except FileNotFoundError as exc:
         raise SystemExit(f"CSV file not found: {csv_path}") from exc
 
-    required_cols = {"implementation", "message_bytes", "latency_ms"}
-    missing = required_cols.difference(df.columns)
+    required_cols: Set[str] = {"implementation", "message_bytes", "latency_ms"}
+    missing: Set[str] = required_cols.difference(df.columns)
     if missing:
         raise SystemExit(f"Missing required columns in CSV: {', '.join(missing)}")
 
@@ -71,55 +72,75 @@ def load_data(csv_path: pathlib.Path) -> pd.DataFrame:
 
 
 def plot_latency(df: pd.DataFrame) -> None:
-    """Plot latency vs. message size from the given DataFrame.
+    """Plot latency benchmarks from a DataFrame.
 
     Args:
-        df (pd.DataFrame): DataFrame containing benchmark results with columns.
+        df (pd.DataFrame): DataFrame containing benchmark results with columns:
+            - 'implementation': Name of the AllReduce implementation.
+            - 'message_bytes': Size of the message in bytes.
+            - 'latency_ms': Latency in milliseconds.
     """
-    impls = df["implementation"].unique()
-    fig, ax = plt.subplots(figsize=(8, 5))
+    # Implementations present in the CSV
+    impls: List[str] = df["implementation"].unique().tolist()
 
-    for impl in impls:
-        subset = df[df["implementation"] == impl].copy()
-        subset = subset.sort_values("message_bytes")
+    # Byte boundaries that delimit the three n-ranges
+    smallest: int = int(df["message_bytes"].min())  # n = 1
+    bound_1: int = smallest * 16  # n = 16
+    bound_2: int = smallest * 128  # n = 128
 
-        subset["latency_us"] = subset["latency_ms"] * 1000
+    ranges: List[Tuple[int | None, int | None]] = [
+        (None, bound_1),
+        (bound_1, bound_2),
+        (bound_2, None),
+    ]
+    titles: List[str] = ["n = 1…15", "n = 16…127", "n = 128…1023"]
 
-        ax.plot(
-            subset["message_bytes"],
-            subset["latency_us"],
-            marker="o",
-            label=impl,
+    fig, axes = plt.subplots(3, 1, figsize=(8, 12), sharex=False)
+
+    for ax, (lo, hi), title in zip(axes, ranges, titles):
+        # select rows inside the current range
+        rng_mask: pd.Series = (df["message_bytes"] >= (lo or -float("inf"))) & (
+            df["message_bytes"] < (hi or float("inf"))
         )
+        rng_df: pd.DataFrame = df[rng_mask].copy()
 
-    # Axis labels and title
-    ax.set_xlabel("Message Size (Bytes)")
-    ax.set_ylabel("Latency (µs)")
-    ax.set_title("AllReduce Latency vs. Message Size")
+        for idx, impl in enumerate(impls):
+            sub: pd.DataFrame = (
+                rng_df[rng_df["implementation"] == impl]
+                .copy()
+                .sort_values("message_bytes")
+            )
+            if sub.empty:
+                continue
+            sub["latency_us"] = sub["latency_ms"] * 1000
+            ax.plot(
+                sub["message_bytes"],
+                sub["latency_us"],
+                marker="o",
+                label=impl,
+            )
 
-    # Use logarithmic scale for x-axis
-    ax.set_xscale("log")
+        ax.set_title(f"Latency vs Message Size ({title})")
+        ax.set_xlabel("Message Size (Bytes)")
+        ax.set_ylabel("Latency (µs)")
+        ax.ticklabel_format(style="plain", axis="x")
+        ax.ticklabel_format(style="plain", axis="y")
+        ax.grid(True, linestyle="--", linewidth=0.5)
+        ax.legend()
 
-    # Disable scientific notation on y-axis for clarity
-    ax.ticklabel_format(style="plain", axis="y")
-
-    ax.grid(True, which="both", linestyle="--", linewidth=0.5)
-    ax.legend()
     fig.tight_layout()
 
     # Create a unique filename
-    date_str = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
-    filename = f"latency_vs_size_{date_str}.png"
-    out_path = pathlib.Path(f"../images/{filename}")
+    date_str: str = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
+    out_path: pathlib.Path = pathlib.Path(f"../images/latency_vs_size_{date_str}.png")
     ensure_parent_dir(out_path)
     fig.savefig(out_path, dpi=300)
-
     print(f"Plot saved to {out_path}")
 
 
 def main() -> None:
-    args = parse_args()
-    data = load_data(args.csv)
+    args: argparse.Namespace = parse_args()
+    data: pd.DataFrame = load_data(args.csv)
     plot_latency(data)
 
 
