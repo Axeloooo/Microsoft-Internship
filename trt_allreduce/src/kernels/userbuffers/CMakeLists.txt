@@ -14,9 +14,18 @@
 # License for the specific language governing permissions and limitations under
 # the License.
 #
-file(GLOB SRCS *.cpp)
-file(GLOB CU_SRCS *.cu)
+if(NOT ENABLE_MULTI_DEVICE)
+  add_library(userbuffers_src OBJECT ub_interface.cpp userbuffersManager.cpp)
+else()
+  file(GLOB_RECURSE SRC_CPP *.cpp)
+  file(GLOB_RECURSE SRC_CU *.cu)
+  add_library(userbuffers_src OBJECT ${SRC_CPP} ${SRC_CU})
+endif()
 
-add_library(common_src OBJECT ${SRCS} ${CU_SRCS})
-set_property(TARGET common_src PROPERTY POSITION_INDEPENDENT_CODE ON)
-set_property(TARGET common_src PROPERTY CUDA_RESOLVE_DEVICE_SYMBOLS ON)
+target_compile_options(userbuffers_src
+                       PRIVATE $<$<COMPILE_LANGUAGE:CUDA>:-maxrregcount=64>)
+
+set_property(TARGET userbuffers_src PROPERTY POSITION_INDEPENDENT_CODE ON)
+set_property(TARGET userbuffers_src PROPERTY CUDA_RESOLVE_DEVICE_SYMBOLS ON)
+
+message(STATUS "UserBuffer ENABLE_MULTI_DEVICE is ${ENABLE_MULTI_DEVICE}")

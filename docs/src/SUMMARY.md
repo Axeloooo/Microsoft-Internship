@@ -13,3 +13,4 @@
 
 - [Custom One-Shot AllReduce](./collectives/custom_oneshot_allreduce.md)
 - [Custom Two-Shot AllGather](./collectives/custom_twoshot_allreduce.md)
+- [Userbuffers](./collectives/userbuffers.md)

@@ -1,5 +1,5 @@
 /**
- * @file checker.cuh
+ * @file checker.h
  * @author Axel Omar Sanchez Peralta (t-axels@microsoft.com)
  * @brief Header file for CUDA and cuBLAS error checking macros.
  * @version 0.1

@@ -1,9 +1,9 @@
 /**
  * @file assert.h
  * @author Axel Omar Sanchez Peralta (t-axels@microsoft.com)
- * @brief Assertion macros for TensorRT-LLM runtime.
+ * @brief Assertion utilities for TensorRT-LLM
  * @version 0.1
- * @date 2025-07-03
+ * @date 2025-07-17
  *
  * @copyright Copyright (c) 2025
  *
@@ -17,16 +17,27 @@
 #include "common/tllmException.h"
 
 namespace trt_allreduce::common {
-[[noreturn]] inline void throwRuntimeError(const char* const file, int const line, std::string const& info = "") {
-    throw TllmException(file, line, fmtstr("[TensorRT-LLM][ERROR] Assertion failed: %s", info.c_str()));
+[[noreturn]] inline void throwRuntimeError(char const* const file, int const line, char const* info) {
+    throw TllmException(file, line, fmtstr("[TensorRT-LLM][ERROR] Assertion failed: %s", info).c_str());
+}
+
+[[noreturn]] inline void throwRuntimeError(char const* const file, int const line, std::string const& info = "") {
+    throw TllmException(file, line, fmtstr("[TensorRT-LLM][ERROR] Assertion failed: %s", info.c_str()).c_str());
 }
 
 }  // namespace trt_allreduce::common
 
+class DebugConfig {
+   public:
+    static bool isCheckDebugEnabled();
+};
+
 #if defined(_WIN32)
 #define TLLM_LIKELY(x) (__assume((x) == 1), (x))
+#define TLLM_UNLIKELY(x) (__assume((x) == 0), (x))
 #else
 #define TLLM_LIKELY(x) __builtin_expect((x), 1)
+#define TLLM_UNLIKELY(x) __builtin_expect((x), 0)
 #endif
 
 #define TLLM_CHECK(val)                                                                                                       \
@@ -34,9 +45,25 @@ namespace trt_allreduce::common {
         TLLM_LIKELY(static_cast<bool>(val)) ? ((void)0) : trt_allreduce::common::throwRuntimeError(__FILE__, __LINE__, #val); \
     } while (0)
 
-#define TLLM_CHECK_WITH_INFO(val, info)                                                                                       \
-    do {                                                                                                                      \
-        TLLM_LIKELY(static_cast<bool>(val)) ? ((void)0) : trt_allreduce::common::throwRuntimeError(__FILE__, __LINE__, info); \
+#define TLLM_CHECK_WITH_INFO(val, info, ...)                                                                                                    \
+    do {                                                                                                                                        \
+        TLLM_LIKELY(static_cast<bool>(val))                                                                                                     \
+        ? ((void)0) : trt_allreduce::common::throwRuntimeError(__FILE__, __LINE__, trt_allreduce::common::fmtstr(info, ##__VA_ARGS__).c_str()); \
+    } while (0)
+
+#define TLLM_CHECK_DEBUG(val)                                                                                                     \
+    do {                                                                                                                          \
+        if (TLLM_UNLIKELY(DebugConfig::isCheckDebugEnabled())) {                                                                  \
+            TLLM_LIKELY(static_cast<bool>(val)) ? ((void)0) : trt_allreduce::common::throwRuntimeError(__FILE__, __LINE__, #val); \
+        }                                                                                                                         \
+    } while (0)
+
+#define TLLM_CHECK_DEBUG_WITH_INFO(val, info, ...)                                                                                                  \
+    do {                                                                                                                                            \
+        if (TLLM_UNLIKELY(DebugConfig::isCheckDebugEnabled())) {                                                                                    \
+            TLLM_LIKELY(static_cast<bool>(val))                                                                                                     \
+            ? ((void)0) : trt_allreduce::common::throwRuntimeError(__FILE__, __LINE__, trt_allreduce::common::fmtstr(info, ##__VA_ARGS__).c_str()); \
+        }                                                                                                                                           \
     } while (0)
 
 #define TLLM_THROW(...)                        \

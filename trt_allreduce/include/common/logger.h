@@ -1,9 +1,9 @@
 /**
  * @file logger.h
  * @author Axel Omar Sanchez Peralta (t-axels@microsoft.com)
- * @brief Logger class for TensorRT-LLM, providing logging functionality at various levels.
+ * @brief Utility functions for logging
  * @version 0.1
- * @date 2025-07-03
+ * @date 2025-07-17
  *
  * @copyright Copyright (c) 2025
  *
@@ -13,10 +13,10 @@
 
 #include <cstdlib>
 #include <iostream>
-#include <map>
 #include <stdexcept>
 #include <string>
 
+#include "common/assert.h"
 #include "common/stringUtils.h"
 
 namespace trt_allreduce::common {
@@ -25,77 +25,90 @@ class Logger {
 // On Windows, the file wingdi.h is included which has
 // #define ERROR 0
 // This breaks everywhere ERROR is used in the Level enum
-#if _WIN32
+#ifdef _WIN32
 #undef ERROR
 #endif  // _WIN32
 
    public:
     enum Level { TRACE = 0, DEBUG = 10, INFO = 20, WARNING = 30, ERROR = 40 };
 
-    static Logger* getLogger() {
-        thread_local auto* instance = new Logger();
-        return instance;
-    }
+    static Logger* getLogger();
 
     Logger(Logger const&) = delete;
     void operator=(Logger const&) = delete;
 
 #if defined(_MSC_VER)
     template <typename... Args>
-    void log(Level level, char const* format, const Args&... args);
+    void log(Level level, char const* format, Args const&... args);
 
     template <typename... Args>
-    void log(Level level, int rank, char const* format, const Args&... args);
+    void log(Level level, int rank, char const* format, Args const&... args);
 #else
     template <typename... Args>
-    void log(Level level, char const* format, const Args&... args) __attribute__((format(printf, 3, 0)));
+    void log(Level level, char const* format, Args const&... args) __attribute__((format(printf, 3, 0)));
 
     template <typename... Args>
-    void log(Level level, int rank, char const* format, const Args&... args) __attribute__((format(printf, 4, 0)));
+    void log(Level level, int rank, char const* format, Args const&... args) __attribute__((format(printf, 4, 0)));
 #endif
 
     template <typename... Args>
-    void log(Level level, std::string const& format, const Args&... args) {
+    void log(Level level, std::string const& format, Args const&... args) {
         return log(level, format.c_str(), args...);
     }
 
     template <typename... Args>
-    void log(const Level level, const int rank, const std::string& format, const Args&... args) {
+    void log(Level const level, int const rank, std::string const& format, Args const&... args) {
         return log(level, rank, format.c_str(), args...);
     }
 
     void log(std::exception const& ex, Level level = Level::ERROR);
 
-    Level getLevel() { return level_; }
+    Level getLevel() const { return level_; }
 
-    void setLevel(const Level level) {
+    void setLevel(Level const level) {
         level_ = level;
-        log(INFO, "Set logger level by %s", getLevelName(level).c_str());
+        log(INFO, "Set logger level to %s", getLevelName(level));
     }
 
+    bool isEnabled(Level const level) const { return level_ <= level; }
+
    private:
-    const std::string PREFIX = "[TensorRT-LLM]";
-    std::map<Level, std::string> level_name_ = {{TRACE, "TRACE"}, {DEBUG, "DEBUG"}, {INFO, "INFO"}, {WARNING, "WARNING"}, {ERROR, "ERROR"}};
+    static auto constexpr kPREFIX = "[TensorRT-LLM]";
 
 #ifndef NDEBUG
-    const Level DEFAULT_LOG_LEVEL = DEBUG;
+    Level const DEFAULT_LOG_LEVEL = DEBUG;
 #else
-    const Level DEFAULT_LOG_LEVEL = INFO;
+    Level const DEFAULT_LOG_LEVEL = INFO;
 #endif
     Level level_ = DEFAULT_LOG_LEVEL;
 
     Logger();  // NOLINT(modernize-use-equals-delete)
 
-    inline std::string getLevelName(const Level level) { return level_name_[level]; }
+    static inline char const* getLevelName(Level const level) {
+        switch (level) {
+            case TRACE:
+                return "TRACE";
+            case DEBUG:
+                return "DEBUG";
+            case INFO:
+                return "INFO";
+            case WARNING:
+                return "WARNING";
+            case ERROR:
+                return "ERROR";
+        }
 
-    inline std::string getPrefix(const Level level) { return PREFIX + "[" + getLevelName(level) + "] "; }
+        TLLM_THROW("Unknown log level: %d", level);
+    }
 
-    inline std::string getPrefix(const Level level, const int rank) { return PREFIX + "[" + getLevelName(level) + "][" + std::to_string(rank) + "] "; }
+    static inline std::string getPrefix(Level const level) { return fmtstr("%s[%s] ", kPREFIX, getLevelName(level)); }
+
+    static inline std::string getPrefix(Level const level, int const rank) { return fmtstr("%s[%s][%d] ", kPREFIX, getLevelName(level), rank); }
 };
 
 template <typename... Args>
 void Logger::log(Logger::Level level, char const* format, Args const&... args) {
-    if (level_ <= level) {
+    if (isEnabled(level)) {
         auto const fmt = getPrefix(level) + format;
         auto& out = level_ < WARNING ? std::cout : std::cerr;
         if constexpr (sizeof...(args) > 0) {
@@ -108,8 +121,8 @@ void Logger::log(Logger::Level level, char const* format, Args const&... args) {
 }
 
 template <typename... Args>
-void Logger::log(const Logger::Level level, const int rank, char const* format, const Args&... args) {
-    if (level_ <= level) {
+void Logger::log(Logger::Level const level, int const rank, char const* format, Args const&... args) {
+    if (isEnabled(level)) {
         auto const fmt = getPrefix(level, rank) + format;
         auto& out = level_ < WARNING ? std::cout : std::cerr;
         if constexpr (sizeof...(args) > 0) {
@@ -121,7 +134,14 @@ void Logger::log(const Logger::Level level, const int rank, char const* format, 
     }
 }
 
-#define TLLM_LOG(level, ...) trt_allreduce::common::Logger::getLogger()->log(level, __VA_ARGS__)
+#define TLLM_LOG(level, ...)                                             \
+    do {                                                                 \
+        auto* const logger = trt_allreduce::common::Logger::getLogger(); \
+        if (logger->isEnabled(level)) {                                  \
+            logger->log(level, __VA_ARGS__);                             \
+        }                                                                \
+    } while (0)
+
 #define TLLM_LOG_TRACE(...) TLLM_LOG(trt_allreduce::common::Logger::TRACE, __VA_ARGS__)
 #define TLLM_LOG_DEBUG(...) TLLM_LOG(trt_allreduce::common::Logger::DEBUG, __VA_ARGS__)
 #define TLLM_LOG_INFO(...) TLLM_LOG(trt_allreduce::common::Logger::INFO, __VA_ARGS__)
