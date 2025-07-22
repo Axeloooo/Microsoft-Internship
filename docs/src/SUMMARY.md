@@ -1,4 +1,4 @@
-![Microsoft Internship](./README.md)
+[Microsoft Internship](./README.md)
 
 ---
 
