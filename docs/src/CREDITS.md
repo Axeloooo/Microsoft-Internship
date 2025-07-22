@@ -1,6 +1,6 @@
 # Credits
 
-This project was developed by **Axel Omar Sánchez Peralta** and mentored **Hongwei Chen**.
+This project was developed by **Axel Omar Sánchez Peralta** and mentored by **Hongwei Chen**.
 
 - **Role:** Software Engineering Student at the University of Calgary
 - **Current Position:** Software Engineer Intern at Microsoft
