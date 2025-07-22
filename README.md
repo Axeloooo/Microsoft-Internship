@@ -1,206 +1,71 @@
 # Microsoft Internship Project
 
-[![Publish Documentation](https://github.com/Axeloooo/Microsoft-Internship/actions/workflows/documentation.yml/badge.svg)](https://github.com/Axeloooo/Microsoft-Internship/actions/workflows/documentation.yml)
-[![Continuous Integration](https://github.com/Axeloooo/Microsoft-Internship/actions/workflows/continuous_integration.yml/badge.svg)](https://github.com/Axeloooo/Microsoft-Internship/actions/workflows/continuous_integration.yml)
+![Publish Documentation](https://github.com/Axeloooo/Microsoft-Internship/actions/workflows/documentation.yml/badge.svg)
+![Continuous Integration](https://github.com/Axeloooo/Microsoft-Internship/actions/workflows/continuous_integration.yml/badge.svg)
 
----
+## Overview
+
+This repository hosts CUDA benchmarks for BLAS operations and custom collective communication algorithms developed during the Microsoft internship.
 
 ## Documentation
 
-- [Specifications](#specifications)
-- [Benchmark](#benchmarks)
-- [BLAS Operations](#blas-operations)
-- [Collective Operations](#collective-operations)
-- [License](#license)
-- [Contributors](#contributors)
-- [Extra](#extra)
+Full documentation is available via mdBook under the `docs/src` folder:
 
---
+- **Getting Started**: [docs/src/README.md](docs/src/README.md)
+- **BLAS Kernels**:
+  - [AXPY](docs/src/blas/axpy.md)
+  - [Dot Product](docs/src/blas/dot.md)
+  - [Reduction](docs/src/blas/reduction.md)
+  - [GEMM](docs/src/blas/gemm.md)
+- **Collective Kernels**:
+  - [One-Shot AllReduce](docs/src/collectives/custom_oneshot_allreduce.md)
+  - [Two-Shot AllReduce](docs/src/collectives/custom_twoshot_allreduce.md)
+  - [User-Buffers AllReduce](docs/src/collectives/userbuffers.md)
 
-## Specifications
+## System Specifications
 
-This project contains CUDA implementations of several vector operations, including vector addition, parallel reduction, dot product, and AXPY (A \* X + Y). The implementations are designed to be efficient and leverage the capabilities of NVIDIA GPUs.
-
-All benchmarks were run on a system with the following specifications:
+Benchmarks were executed on:
 
 - CPU: Intel Xeon Platinum 8480C
 - GPU: NVIDIA H200
-- Threads per block: 256
-- Elements per vector: 4,194,304
+- Threads per block: 256 (BLAS)
+- MPI ranks per node: variable (Collectives)
 
----
+## Building and Running
 
-## Benchmark
+### BLAS Benchmarks
 
-### BLAS Operations
-
-- AXPY:
-
-| Kernel                     | Latency (ms) | Bandwidth (TB/s) | % of cuBLAS |
-| -------------------------- | ------------ | ---------------- | ----------- |
-| CPU                        | 5.69472      | 0.0058922        | 0.48 %      |
-| Naive AXPY GPU Kernel      | 0.028864     | 1.1625           | 94.00 %     |
-| Vectorized AXPY GPU Kernel | 0.027264     | 1.23072          | 99.53 %     |
-| cuBLAS                     | 0.027136     | 1.23653          | 100 %       |
-
-- Reduction:
-
-| Kernel                              | Latency (ms) | Bandwidth (TB/s) | % of cuBLAS |
-| ----------------------------------- | ------------ | ---------------- | ----------- |
-| CPU                                 | 4.4047       | 0.00380893       | N/A         |
-| Naive Reduce GPU                    | 0.05024      | 0.333941         | N/A         |
-| Interleaved Addressing Reduce GPU   | 0.037216     | 0.450807         | N/A         |
-| Sequence Addressing Reduce GPU      | 0.050432     | 0.33267          | N/A         |
-| Add During Load Reduce GPU          | 0.02112      | 0.794376         | N/A         |
-| Unroll Last Warp Reduce GPU         | 0.019776     | 0.848362         | N/A         |
-| Completely Unrolled Warp Reduce GPU | 0.023456     | 0.715263         | N/A         |
-| Multiple Elements Reduce GPU        | 0.01968      | 0.852501         | N/A         |
-
-- Dot Product:
-
-| Kernel           | Latency (ms) | Bandwidth (TB/s) | % of cuBLAS |
-| ---------------- | ------------ | ---------------- | ----------- |
-| CPU              | 10.3247      | 0.00324993       | 0.24 %      |
-| Naive Kernel     | 7.37251      | 0.00455129       | 0.34 %      |
-| Optimized Kernel | 0.026528     | 1.26487          | 94.57 %     |
-| cuBLAS           | 0.025088     | 1.33747          | 100 %       |
-
-- GEMM:
-
-| Kernel | Latency (ms) | GFLOPs | % of cuBLAS |
-| ------ | ------------ | ------ | ----------- |
-
-### Collective Operations
-
-- ReduceScatter:
-
-| Kernel | Latency (ms) | Bandwidth (TB/s) | % of NCCL |
-
-- AllGather:
-
-| Kernel | Latency (ms) | Bandwidth (TB/s) | % of NCCL |
-
-- AllReduce:
-
-| Kernel | Latency (ms) | Bandwidth (TB/s) | % of NCCL |
-
-- Broadcast:
-
-| Kernel | Latency (ms) | Bandwidth (TB/s) | % of NCCL |
-
-- Reduce:
-
-| Kernel | Latency (ms) | Bandwidth (TB/s) | % of NCCL |
-
----
-
-## BLAS Operations
-
-This project implements several BLAS (Basic Linear Algebra Subprograms) operations using CUDA. The following sections detail how to run each operation.
-
-### Reduction
-
-- Run the benchmark.
+Compile and run BLAS kernels via Makefile:
 
 ```bash
-make blas TARGET=reduce
+# Build all BLAS targets
+make blas TARGET=axpy      # Vector AXPY (Y = aX + Y)
+make blas TARGET=reduce    # Parallel reduction
+make blas TARGET=dot       # Dot product
+make blas TARGET=gemm      # Matrix multiplication (GEMM)
 ```
 
-### Dot Product
+### Collective Benchmarks
 
-- Run the benchmark.
+Under `trt_allreduce/scripts`:
 
 ```bash
-make blas TARGET=dot
+cd trt_allreduce/scripts
+chmod +x build.sh benchmark.sh
+./build.sh                  # Build collective benchmarks
+./benchmark.sh -n 4 -d fp32  # Run with 4 MPI ranks, FP32 precision
+./benchmark.sh -n 4 -d fp16  # Run with 4 MPI ranks, FP16 precision
 ```
 
-### AXPY
+## Development Environment
 
-- Run the benchmark.
-
-```bash
-make blas TARGET=axpy
-```
-
-### GEMM
-
-- Run the benchmark.
+Use Docker Compose or standalone Docker:
 
 ```bash
-make blas TARGET=gemm
-```
-
----
-
-## Collective Operations
-
-This project also implements collective operations using MCCL (Micorosft Collective Communication Library) and NCCL (NVIDIA Collective Communications Library). The following sections detail how to run each operation.
-
-### ReduceScatter
-
-- Run the benchmark.
-
-```bash
-make collective TARGET=reducescatter
-```
-
-### AllGather
-
-- Run the benchmark.
-
-```bash
-make collective TARGET=allgather
-```
-
-### AllReduce
-
-- Run the benchmark.
-
-```bash
-make collective TARGET=allreduce
-```
-
-### Broadcast
-
-- Run the benchmark.
-
-```bash
-make collective TARGET=broadcast
-```
-
-### Reduce
-
-- Run the benchmark.
-
-```bash
-make collective TARGET=reduce
-```
-
----
-
-## License
-
-This project is licensed under the Apache License 2.0 - see the [LICENSE](LICENSE) file for details.
-
----
-
-## Contributors
-
-- [Axel Sanchez](https://github.com/Axeloooo)
-
----
-
-## Extra
-
-- Development environment setup using Docker Compose:
-
-```bash
+# Docker Compose
 docker compose up -d
-```
 
-- Development environment setup using Docker:
-
-```bash
+# Standalone Docker
 docker run --gpus all -it \
   --user $(id -u):$(id -g) \
   --name microsoft-internship-axel \
@@ -210,8 +75,16 @@ docker run --gpus all -it \
   --device=/dev/dri \
   --ulimit memlock=-1 \
   --ulimit stack=67108864 \
-  -v /home/t-axels/Microsoft-Internship:/workspace \
+  -v $(pwd):/workspace \
   --ipc=host \
   --shm-size=32g \
   nvcr.io/nvidia/pytorch:24.12-py3
 ```
+
+## License
+
+This project is licensed under the Apache License 2.0 - see [LICENSE](LICENSE).
+
+## Contributors
+
+- Axel Omar Sanchez Peralta ([Axeloooo](https://github.com/Axeloooo))

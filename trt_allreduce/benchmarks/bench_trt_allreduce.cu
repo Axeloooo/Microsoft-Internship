@@ -61,9 +61,6 @@ using trt_allreduce::utils::CsvWriter;
 using trt_allreduce::utils::CudaTimer;
 using trt_allreduce::utils::InitVector;
 
-// -----------------------------------------------------------------------------
-// Put benchmark-related definitions inside the new namespace.
-// -----------------------------------------------------------------------------
 namespace trt_allreduce::benchmark {
 
 // -------------------------------------------------------------------------------------------------

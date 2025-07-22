@@ -4,13 +4,20 @@
 
 # BLAS Kernels
 
-- [AXPY](./blas/benchmark_axpy.md)
-- [DOT](./blas/benchmark_dot.md)
-- [Reduction](./blas/benchmark_reduction.md)
-- [GEMM](./blas/benchmark_gemm.md)
+- [AXPY Kernel](./blas/axpy.md)
+- [Dot Product Kernel](./blas/dot.md)
+- [Reduction Kernel](./blas/reduction.md)
+- [GEMM Kernel](./blas/gemm.md)
 
-# Collective Operations
+---
+
+# Collective Kernels
 
 - [Custom One-Shot AllReduce](./collectives/custom_oneshot_allreduce.md)
-- [Custom Two-Shot AllGather](./collectives/custom_twoshot_allreduce.md)
-- [Userbuffers](./collectives/userbuffers.md)
+- [Custom Two-Shot AllReduce](./collectives/custom_twoshot_allreduce.md)
+- [User-Buffers AllReduce](./collectives/userbuffers.md)
+
+---
+
+[Credits](./credits.md)
+[License](./license.md)
