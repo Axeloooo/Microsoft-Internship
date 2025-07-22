@@ -49,7 +49,7 @@ customAllReduce(
 
 - `p`: Struct holding peer pointers, element counts, and barrier flags.
 - `config.dtype`: Chooses FP32 (`kFLOAT`) or FP16 (`kHALF`).
-- `AllReduceStrategyType::ONESHOT`: Single-kernel reduction strategy.
+- `AllReduceStrategyType::TWOSHOT`: Two-kernel reduction strategy separating reduce-scatter and allgather phases.
 - `AllReduceStrategyConfig`: Bitmask for optional tuning flags (unused here).
 - `AllReduceFusionOp::NONE`: Disables any kernel fusion.
 - `config.stream`: CUDA stream on which operations are enqueued.
