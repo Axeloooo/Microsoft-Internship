@@ -19,5 +19,5 @@
 
 ---
 
-[Credits](./credits.md)
-[License](./license.md)
+[Credits](./CREDITS.md)
+[License](./LICENSE.md)
