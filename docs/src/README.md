@@ -10,8 +10,3 @@ Welcome to the documentation for the Microsoft Internship Project. This guide co
 Refer to the sidebar or the [Summary](./SUMMARY.md) for detailed pages on each kernel.
 
 Happy Coding!
-
-## Status
-
-[![Publish Documentation](https://github.com/Axeloooo/Microsoft-Internship/actions/workflows/documentation.yml/badge.svg)](https://github.com/Axeloooo/Microsoft-Internship/actions/workflows/documentation.yml)
-[![Continuous Integration](https://github.com/Axeloooo/Microsoft-Internship/actions/workflows/continuous_integration.yml/badge.svg)](https://github.com/Axeloooo/Microsoft-Internship/actions/workflows/continuous_integration.yml)
