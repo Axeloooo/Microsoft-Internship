@@ -11,7 +11,7 @@ This repository hosts CUDA benchmarks for BLAS operations and custom collective 
 
 Full documentation is available via mdBook under the `docs/src` folder:
 
-- **Getting Started**: [docs/src/README.md](docs/src/README.md)
+- **Microsoft Internship**: [docs/src/README.md](docs/src/README.md)
 - **BLAS Kernels**:
   - [AXPY](docs/src/blas/axpy.md)
   - [Dot Product](docs/src/blas/dot.md)
@@ -53,19 +53,21 @@ Under `trt_allreduce/scripts`:
 cd trt_allreduce/scripts
 chmod +x build.sh benchmark.sh
 ./build.sh                  # Build collective benchmarks
-./benchmark.sh -n 4 -d fp32  # Run with 4 MPI ranks, FP32 precision
-./benchmark.sh -n 4 -d fp16  # Run with 4 MPI ranks, FP16 precision
+./benchmark.sh -n 4 -d fp32 -i 100 -s all  # Run with 4 MPI ranks, FP32 precision, 100 iterations, all strategies
+./benchmark.sh -n 4 -d fp16 -i 100 -s ub  # Run with 4 MPI ranks, FP16 precision, 100 iterations, user-buffers strategy
 ```
 
 ## Development Environment
 
-Use Docker Compose or standalone Docker:
+Use Docker Compose:
 
 ```bash
-# Docker Compose
 docker compose up -d
+```
 
-# Standalone Docker
+Standalone Docker:
+
+```bash
 docker run --gpus all -it \
   --user $(id -u):$(id -g) \
   --name microsoft-internship-axel \
