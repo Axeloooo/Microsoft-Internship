@@ -43,6 +43,8 @@ class CsvWriter {
      * @brief Write a row to the CSV file.
      *
      * @param impl Implementation name.
+     * @param data_type Data type of the message.
+     * @param iters Number of iterations.
      * @param bytes Number of bytes in the message.
      * @param latency_ms Latency in milliseconds.
      * @param bandwidth_tb Bandwidth in TBps.
@@ -52,8 +54,8 @@ class CsvWriter {
      * @param max_rel_err Maximum relative error.
      * @param rmse Root mean square error.
      */
-    void WriteRow(const std::string& impl, std::size_t bytes, double latency_ms, double bandwidth_tb, double accuracy_pct, float max_abs_err, double mean_abs_err,
-                  float max_rel_err, double rmse);
+    void WriteRow(const std::string& impl, const std::string& data_type, const std::size_t& iters, std::size_t bytes, double latency_ms, double bandwidth_tb,
+                  double accuracy_pct, float max_abs_err, double mean_abs_err, float max_rel_err, double rmse);
 
     /**
      * @brief Check if the file is open.

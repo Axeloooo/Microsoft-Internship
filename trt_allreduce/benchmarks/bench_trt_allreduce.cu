@@ -89,7 +89,7 @@ constexpr char const* kDirectoryPath = "data";
 struct BenchmarkConfig {
     nvinfer1::DataType dtype{};
     std::size_t element_size{0};
-    int iterations{10};
+    std::size_t iterations{10};
     int world_size{0};
     int world_rank{0};
     int local_rank{0};
@@ -104,6 +104,8 @@ struct BenchmarkConfig {
  */
 struct BenchmarkResults {
     std::string implementation;
+    std::string data_type;
+    std::size_t iterations{0};
     std::size_t num_elements{0};
     std::size_t message_bytes{0};
     float latency_ms{0.0F};
@@ -346,6 +348,8 @@ BenchmarkResults BenchmarkNccl(void* d_sendbuff, void* d_recvbuff, std::size_t e
     // Store results
     BenchmarkResults r{};
     r.implementation = kNcclLabel;
+    r.data_type = (config.dtype == nvinfer1::DataType::kFLOAT) ? "float32" : "float16";
+    r.iterations = config.iterations;
     r.num_elements = elements;
     r.message_bytes = elements * config.element_size;
     r.latency_ms = total_time / static_cast<float>(config.iterations);
@@ -392,6 +396,8 @@ BenchmarkResults BenchmarkOneshot(void* d_sendbuff, void* d_recvbuff, std::size_
     // Store results
     BenchmarkResults r{};
     r.implementation = kOneShotLabel;
+    r.data_type = (config.dtype == nvinfer1::DataType::kFLOAT) ? "float32" : "float16";
+    r.iterations = config.iterations;
     r.num_elements = elements;
     r.message_bytes = elements * config.element_size;
     r.latency_ms = total_time / static_cast<float>(config.iterations);
@@ -438,6 +444,8 @@ BenchmarkResults BenchmarkTwoshot(void* d_sendbuff, void* d_recvbuff, std::size_
     // Store results
     BenchmarkResults r{};
     r.implementation = kTwoShotLabel;
+    r.data_type = (config.dtype == nvinfer1::DataType::kFLOAT) ? "float32" : "float16";
+    r.iterations = config.iterations;
     r.num_elements = elements;
     r.message_bytes = elements * config.element_size;
     r.latency_ms = total_time / static_cast<float>(config.iterations);
@@ -491,6 +499,8 @@ BenchmarkResults BenchmarkUb(void* d_sendbuff, void* d_recvbuff, std::size_t ele
     // Store results
     BenchmarkResults r{};
     r.implementation = kUbLabel;
+    r.data_type = (config.dtype == nvinfer1::DataType::kFLOAT) ? "float32" : "float16";
+    r.iterations = config.iterations;
     r.num_elements = elements;
     r.message_bytes = bytes;
     r.latency_ms = total_time / static_cast<float>(config.iterations);
@@ -524,14 +534,17 @@ int main(int argc, char** argv) {
 
     // Set default hyperparameters
     std::string dtype_s = "fp32";
-    int iterations = 10;
+    std::size_t iterations = 10;
+    std::string strat_s = "all";
 
     // Parse command line arguments
-    for (int i = 1; i < argc; ++i) {
+    for (std::size_t i = 1; i < argc; ++i) {
         if (!std::strcmp(argv[i], "--dtype") && i + 1 < argc) {
             dtype_s = argv[++i];
         } else if (!std::strcmp(argv[i], "--iters") && i + 1 < argc) {
             iterations = std::atoi(argv[++i]);
+        } else if (!std::strcmp(argv[i], "--strat") && i + 1 < argc) {
+            strat_s = argv[++i];
         }
     }
 
@@ -567,7 +580,7 @@ int main(int argc, char** argv) {
     std::unique_ptr<CsvWriter> csv_writer;
     if (config.world_rank == 0) {
         std::filesystem::create_directories(kDirectoryPath);
-        std::string filename = std::string(kDirectoryPath) + "/" + kFileName + "_" + GenerateTimestamp() + "_" + dtype_s + ".csv";
+        std::string filename = std::string(kDirectoryPath) + "/" + kFileName + "_" + strat_s + "_" + GenerateTimestamp() + "_" + dtype_s + ".csv";
         csv_writer = std::make_unique<CsvWriter>(filename, true);
     }
 
@@ -581,9 +594,14 @@ int main(int argc, char** argv) {
     std::size_t const max_n = static_cast<std::size_t>(n_values.back()) * kSweepSize;
     std::size_t const max_bytes = max_n * config.element_size;
 
+    bool const run_oneshot = (strat_s == "all" || strat_s == "oneshot");
+    bool const run_twoshot = (strat_s == "all" || strat_s == "twoshot");
+    bool const run_ub = (strat_s == "all" || strat_s == "ub");
+    bool const run_multi = run_oneshot || run_twoshot;
+
     // Initialize user-buffers (fp16 only) and allocate once
-    UBBuffer ubuff;
-    if (config.dtype == nvinfer1::DataType::kHALF) {
+    UBBuffer ubuff{};
+    if (run_ub && config.dtype == nvinfer1::DataType::kHALF) {
         ub_initialize(config.world_size);
         ubuff = ub_allocate(max_bytes);
     }
@@ -605,21 +623,24 @@ int main(int argc, char** argv) {
         CUDA_CHECK(cudaMemcpy(d_sendbuff, h.data(), max_bytes, cudaMemcpyHostToDevice));
     }
 
-    // Allocate shared memory for communication buffers and barriers
+    // Allocate shared memory for communication buffers and barriers (needed only for one/two-shot)
     void* d_comm_buf = nullptr;
     uint32_t* d_barrier_in = nullptr;
     uint32_t* d_barrier_out = nullptr;
-    CUDA_CHECK(cudaMalloc(&d_comm_buf, max_bytes));
-    CUDA_CHECK(cudaMalloc(&d_barrier_in, sizeof(uint32_t)));
-    CUDA_CHECK(cudaMalloc(&d_barrier_out, sizeof(uint32_t)));
 
-    // Initialize communication buffers and barriers
     std::vector<void*> peer_comm_ptrs;
     std::vector<uint32_t*> peer_barrier_in_ptrs;
     std::vector<uint32_t*> peer_barrier_out_ptrs;
-    ShareIpcPtrs(d_comm_buf, peer_comm_ptrs, config.local_rank, config.ranks_per_node);
-    ShareIpcPtrs(d_barrier_in, peer_barrier_in_ptrs, config.local_rank, config.ranks_per_node);
-    ShareIpcPtrs(d_barrier_out, peer_barrier_out_ptrs, config.local_rank, config.ranks_per_node);
+
+    if (run_multi) {
+        CUDA_CHECK(cudaMalloc(&d_comm_buf, max_bytes));
+        CUDA_CHECK(cudaMalloc(&d_barrier_in, sizeof(uint32_t)));
+        CUDA_CHECK(cudaMalloc(&d_barrier_out, sizeof(uint32_t)));
+
+        ShareIpcPtrs(d_comm_buf, peer_comm_ptrs, config.local_rank, config.ranks_per_node);
+        ShareIpcPtrs(d_barrier_in, peer_barrier_in_ptrs, config.local_rank, config.ranks_per_node);
+        ShareIpcPtrs(d_barrier_out, peer_barrier_out_ptrs, config.local_rank, config.ranks_per_node);
+    }
 
     // Set initial barrier values
     uint32_t barrier_counter = 1;
@@ -663,60 +684,66 @@ int main(int argc, char** argv) {
         nccl_res.rmse = val_res.rmse;
 
         if (csv_writer) {
-            csv_writer->WriteRow(nccl_res.implementation, nccl_res.message_bytes, nccl_res.latency_ms, nccl_res.bandwidth_gbps, nccl_res.accuracy_pct, nccl_res.max_abs_error,
-                                 nccl_res.mean_abs_error, nccl_res.max_rel_error, nccl_res.rmse);
+            csv_writer->WriteRow(nccl_res.implementation, nccl_res.data_type, nccl_res.iterations, nccl_res.message_bytes, nccl_res.latency_ms, nccl_res.bandwidth_gbps,
+                                 nccl_res.accuracy_pct, nccl_res.max_abs_error, nccl_res.mean_abs_error, nccl_res.max_rel_error, nccl_res.rmse);
         }
 
         // Reset and benchmark one-shot
-        CUDA_CHECK(cudaMemset(d_recvbuff, 0, bytes));
-        BenchmarkResults oneshot_res =
-            BenchmarkOneshot(d_sendbuff, d_recvbuff, elements, peer_comm_ptrs, peer_barrier_in_ptrs, peer_barrier_out_ptrs, config, barrier_counter);
+        if (run_oneshot) {
+            CUDA_CHECK(cudaMemset(d_recvbuff, 0, bytes));
+            BenchmarkResults oneshot_res =
+                BenchmarkOneshot(d_sendbuff, d_recvbuff, elements, peer_comm_ptrs, peer_barrier_in_ptrs, peer_barrier_out_ptrs, config, barrier_counter);
 
-        // Validate one-shot (reuse golden)
-        if (config.dtype == nvinfer1::DataType::kFLOAT) {
-            val_res = ValidateResults<float>(d_recvbuff, golden_fp32, config, elements);
-        } else {
-            val_res = ValidateResults<__half>(d_recvbuff, golden_fp16, config, elements);
-        }
+            // Validate one-shot (reuse golden)
+            if (config.dtype == nvinfer1::DataType::kFLOAT) {
+                val_res = ValidateResults<float>(d_recvbuff, golden_fp32, config, elements);
+            } else {
+                val_res = ValidateResults<__half>(d_recvbuff, golden_fp16, config, elements);
+            }
 
-        // Store one-shot results
-        oneshot_res.accuracy_pct = val_res.accuracy_pct;
-        oneshot_res.max_abs_error = val_res.max_abs_error;
-        oneshot_res.mean_abs_error = val_res.mean_abs_error;
-        oneshot_res.max_rel_error = val_res.max_rel_error;
-        oneshot_res.rmse = val_res.rmse;
+            // Store one-shot results
+            oneshot_res.accuracy_pct = val_res.accuracy_pct;
+            oneshot_res.max_abs_error = val_res.max_abs_error;
+            oneshot_res.mean_abs_error = val_res.mean_abs_error;
+            oneshot_res.max_rel_error = val_res.max_rel_error;
+            oneshot_res.rmse = val_res.rmse;
 
-        if (csv_writer) {
-            csv_writer->WriteRow(oneshot_res.implementation, oneshot_res.message_bytes, oneshot_res.latency_ms, oneshot_res.bandwidth_gbps, oneshot_res.accuracy_pct,
-                                 oneshot_res.max_abs_error, oneshot_res.mean_abs_error, oneshot_res.max_rel_error, oneshot_res.rmse);
+            if (csv_writer) {
+                csv_writer->WriteRow(oneshot_res.implementation, oneshot_res.data_type, oneshot_res.iterations, oneshot_res.message_bytes, oneshot_res.latency_ms,
+                                     oneshot_res.bandwidth_gbps, oneshot_res.accuracy_pct, oneshot_res.max_abs_error, oneshot_res.mean_abs_error, oneshot_res.max_rel_error,
+                                     oneshot_res.rmse);
+            }
         }
 
         // Reset and benchmark two-shot
-        CUDA_CHECK(cudaMemset(d_recvbuff, 0, bytes));
-        BenchmarkResults twoshot_res =
-            BenchmarkTwoshot(d_sendbuff, d_recvbuff, elements, peer_comm_ptrs, peer_barrier_in_ptrs, peer_barrier_out_ptrs, config, barrier_counter);
+        if (run_twoshot) {
+            CUDA_CHECK(cudaMemset(d_recvbuff, 0, bytes));
+            BenchmarkResults twoshot_res =
+                BenchmarkTwoshot(d_sendbuff, d_recvbuff, elements, peer_comm_ptrs, peer_barrier_in_ptrs, peer_barrier_out_ptrs, config, barrier_counter);
 
-        // Validate two-shot (reuse golden)
-        if (config.dtype == nvinfer1::DataType::kFLOAT) {
-            val_res = ValidateResults<float>(d_recvbuff, golden_fp32, config, elements);
-        } else {
-            val_res = ValidateResults<__half>(d_recvbuff, golden_fp16, config, elements);
-        }
+            // Validate two-shot (reuse golden)
+            if (config.dtype == nvinfer1::DataType::kFLOAT) {
+                val_res = ValidateResults<float>(d_recvbuff, golden_fp32, config, elements);
+            } else {
+                val_res = ValidateResults<__half>(d_recvbuff, golden_fp16, config, elements);
+            }
 
-        // Store two-shot results
-        twoshot_res.accuracy_pct = val_res.accuracy_pct;
-        twoshot_res.max_abs_error = val_res.max_abs_error;
-        twoshot_res.mean_abs_error = val_res.mean_abs_error;
-        twoshot_res.max_rel_error = val_res.max_rel_error;
-        twoshot_res.rmse = val_res.rmse;
+            // Store two-shot results
+            twoshot_res.accuracy_pct = val_res.accuracy_pct;
+            twoshot_res.max_abs_error = val_res.max_abs_error;
+            twoshot_res.mean_abs_error = val_res.mean_abs_error;
+            twoshot_res.max_rel_error = val_res.max_rel_error;
+            twoshot_res.rmse = val_res.rmse;
 
-        if (csv_writer) {
-            csv_writer->WriteRow(twoshot_res.implementation, twoshot_res.message_bytes, twoshot_res.latency_ms, twoshot_res.bandwidth_gbps, twoshot_res.accuracy_pct,
-                                 twoshot_res.max_abs_error, twoshot_res.mean_abs_error, twoshot_res.max_rel_error, twoshot_res.rmse);
+            if (csv_writer) {
+                csv_writer->WriteRow(twoshot_res.implementation, twoshot_res.data_type, twoshot_res.iterations, twoshot_res.message_bytes, twoshot_res.latency_ms,
+                                     twoshot_res.bandwidth_gbps, twoshot_res.accuracy_pct, twoshot_res.max_abs_error, twoshot_res.mean_abs_error, twoshot_res.max_rel_error,
+                                     twoshot_res.rmse);
+            }
         }
 
         // Reset and benchmark user-buffers
-        if (config.dtype == nvinfer1::DataType::kHALF) {
+        if (run_ub && config.dtype == nvinfer1::DataType::kHALF) {
             CUDA_CHECK(cudaMemset(d_recvbuff, 0, bytes));
             BenchmarkResults ub_res = BenchmarkUb(d_sendbuff, d_recvbuff, elements, config, ubuff);
 
@@ -731,14 +758,19 @@ int main(int argc, char** argv) {
             ub_res.rmse = val_res.rmse;
 
             if (csv_writer) {
-                csv_writer->WriteRow(ub_res.implementation, ub_res.message_bytes, ub_res.latency_ms, ub_res.bandwidth_gbps, ub_res.accuracy_pct, ub_res.max_abs_error,
-                                     ub_res.mean_abs_error, ub_res.max_rel_error, ub_res.rmse);
+                csv_writer->WriteRow(ub_res.implementation, ub_res.data_type, ub_res.iterations, ub_res.message_bytes, ub_res.latency_ms, ub_res.bandwidth_gbps,
+                                     ub_res.accuracy_pct, ub_res.max_abs_error, ub_res.mean_abs_error, ub_res.max_rel_error, ub_res.rmse);
             }
         }
     }
 
     // Clean-up resources
-    if (config.dtype == nvinfer1::DataType::kHALF) {
+    if (run_multi) {
+        CUDA_CHECK(cudaFree(d_comm_buf));
+        CUDA_CHECK(cudaFree(d_barrier_in));
+        CUDA_CHECK(cudaFree(d_barrier_out));
+    }
+    if (run_ub && config.dtype == nvinfer1::DataType::kHALF) {
         ub_deallocate(ubuff.addr);
     }
 
