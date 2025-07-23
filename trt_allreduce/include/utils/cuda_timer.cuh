@@ -23,6 +23,7 @@ class CudaTimer {
    private:
     cudaEvent_t start_event_;
     cudaEvent_t stop_event_;
+    cudaStream_t stream_;
 
    public:
     /**
@@ -30,6 +31,12 @@ class CudaTimer {
      *
      */
     CudaTimer();
+
+    /**
+     * @brief Construct a new Cuda Timer object
+     *
+     */
+    CudaTimer(const cudaStream_t& stream);
 
     /**
      * @brief Destroy the Cuda Timer object

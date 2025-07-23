@@ -334,7 +334,7 @@ BenchmarkResults BenchmarkNccl(void* d_sendbuff, void* d_recvbuff, std::size_t e
     }
 
     // Perform NCCL all-reduce
-    CudaTimer timer;
+    CudaTimer timer(config.stream);
     timer.Start();
     for (std::size_t it = 0; it < config.iterations; ++it) {
         NCCL_CHECK(
@@ -380,7 +380,7 @@ BenchmarkResults BenchmarkOneshot(void* d_sendbuff, void* d_recvbuff, std::size_
     }
 
     // Perform One-shot all-reduce
-    CudaTimer timer;
+    CudaTimer timer(config.stream);
     timer.Start();
     for (std::size_t it = 0; it < config.iterations; ++it) {
         AllReduceParams p = MakeMultiShotParams(d_sendbuff, d_recvbuff, elements, config, peer_comm_ptrs, peer_barrier_in_ptrs, peer_barrier_out_ptrs, barrier_counter++);
@@ -426,7 +426,7 @@ BenchmarkResults BenchmarkTwoshot(void* d_sendbuff, void* d_recvbuff, std::size_
     }
 
     // Perform Two-shot all-reduce
-    CudaTimer timer;
+    CudaTimer timer(config.stream);
     timer.Start();
     for (std::size_t it = 0; it < config.iterations; ++it) {
         AllReduceParams p = MakeMultiShotParams(d_sendbuff, d_recvbuff, elements, config, peer_comm_ptrs, peer_barrier_in_ptrs, peer_barrier_out_ptrs, barrier_counter++);
@@ -477,21 +477,16 @@ BenchmarkResults BenchmarkUb(void* d_sendbuff, void* d_recvbuff, std::size_t ele
         allreduce2_userbuff_inplace_launcher(userbuff.handle, 0, elements, config.dtype, comm, config.stream);
     }
 
-    // Reset buffer after warm-up
-    CUDA_CHECK(cudaMemcpyAsync(userbuff.addr, d_sendbuff, bytes, cudaMemcpyDeviceToDevice, config.stream));
-
     // Perform user-buffer all-reduce
-    CudaTimer timer;
+    CudaTimer timer(config.stream);
     timer.Start();
     for (std::size_t it = 0; it < config.iterations; ++it) {
         CUDA_CHECK(cudaMemcpyAsync(userbuff.addr, d_sendbuff, bytes, cudaMemcpyDeviceToDevice, config.stream));
         allreduce2_userbuff_inplace_launcher(userbuff.handle, 0, elements, config.dtype, comm, config.stream);
+        CUDA_CHECK(cudaMemcpy(d_recvbuff, userbuff.addr, bytes, cudaMemcpyDeviceToDevice));
     }
     CUDA_CHECK(cudaStreamSynchronize(config.stream));
     float total_time = timer.Stop();
-
-    // Copy result back for validation
-    CUDA_CHECK(cudaMemcpy(d_recvbuff, userbuff.addr, bytes, cudaMemcpyDeviceToDevice));
 
     // Store results
     BenchmarkResults r{};
