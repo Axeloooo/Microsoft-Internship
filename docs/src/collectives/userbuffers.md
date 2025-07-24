@@ -118,6 +118,6 @@ Results are written to `trt_allreduce/data/benchmark_trt_allreduce_<timestamp>_<
 
 ### FP16 User-Buffers AllReduce Results
 
-![User-Buffers AllReduce Performance FP16](../../../trt_allreduce/images/latency_vs_size_20250723-224737.png)
+![User-Buffers AllReduce Performance FP16](../images/latency_vs_size_20250723-224737.png)
 
 For full tables and CSVs, see files under `trt_allreduce/data/`. Use `python/plot_benchmark.py` to compare One-Shot, Two-Shot, and User-Buffers strategies visually.
