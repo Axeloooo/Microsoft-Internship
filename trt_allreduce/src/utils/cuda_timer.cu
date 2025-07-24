@@ -25,6 +25,11 @@ CudaTimer::CudaTimer() {
     CUDA_CHECK(cudaEventCreate(&stop_event_));
 }
 
+CudaTimer::CudaTimer(const cudaStream_t& stream) : stream_(stream) {
+    CUDA_CHECK(cudaEventCreateWithFlags(&start_event_, cudaEventDefault));
+    CUDA_CHECK(cudaEventCreateWithFlags(&stop_event_, cudaEventDefault));
+}
+
 /**
  * @brief Destroy the Cuda Timer object
  *
@@ -38,7 +43,7 @@ CudaTimer::~CudaTimer() {
  * @brief Start the timer.
  *
  */
-void CudaTimer::Start() { CUDA_CHECK(cudaEventRecord(start_event_)); }
+void CudaTimer::Start() { CUDA_CHECK(cudaEventRecord(start_event_, stream_)); }
 
 /**
  * @brief Stop the timer and return the elapsed time in milliseconds.
@@ -46,7 +51,7 @@ void CudaTimer::Start() { CUDA_CHECK(cudaEventRecord(start_event_)); }
  * @return float
  */
 float CudaTimer::Stop() {
-    CUDA_CHECK(cudaEventRecord(stop_event_));
+    CUDA_CHECK(cudaEventRecord(stop_event_, stream_));
     CUDA_CHECK(cudaEventSynchronize(stop_event_));
     float ms;
     CUDA_CHECK(cudaEventElapsedTime(&ms, start_event_, stop_event_));

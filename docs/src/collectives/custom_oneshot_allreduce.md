@@ -101,20 +101,10 @@ Results are written to `trt_allreduce/data/benchmark_trt_allreduce_<timestamp>_<
 
 ### FP32 AllReduce Results
 
-| Message Bytes | Latency (µs) | Bandwidth (GB/s) | Accuracy (%) |
-| ------------: | -----------: | ---------------: | -----------: |
-|        163840 |          120 |             10.2 |        100.0 |
-|        524288 |          450 |             11.7 |        100.0 |
-|       1048576 |          900 |             11.7 |        100.0 |
-|       2097152 |         1800 |             11.6 |        100.0 |
+![One-Shot AllReduce Performance FP32](../../../trt_allreduce/images/latency_vs_size_20250723-224058.png)
 
 ### FP16 AllReduce Results
 
-| Message Bytes | Latency (µs) | Bandwidth (GB/s) | Accuracy (%) |
-| ------------: | -----------: | ---------------: | -----------: |
-|        163840 |           80 |             15.0 |        100.0 |
-|        524288 |          320 |             16.5 |        100.0 |
-|       1048576 |          640 |             16.4 |        100.0 |
-|       2097152 |         1280 |             16.2 |        100.0 |
+![One-Shot AllReduce Performance FP16](../../../trt_allreduce/images/latency_vs_size_20250723-224038.png)
 
 Full CSVs for other message sizes and configurations are available under `trt_allreduce/data/`. Use `python/plot_benchmark.py` to generate comprehensive plots.

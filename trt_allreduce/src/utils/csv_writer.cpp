@@ -26,7 +26,7 @@ CsvWriter::CsvWriter(const std::string& path, bool with_header) : file_(path, st
         throw std::runtime_error("CsvWriter: cannot open " + path);
     }
     if (with_header) {
-        file_ << "implementation,message_bytes,latency_ms,bandwidth_GBps,accuracy_pct,max_abs_error,mean_abs_error,max_rel_error,rmse" << std::endl;
+        file_ << "implementation,data_type,iterations,message_bytes,latency_ms,bandwidth_GBps,accuracy_pct,max_abs_error,mean_abs_error,max_rel_error,rmse" << std::endl;
     }
 }
 
@@ -44,6 +44,8 @@ CsvWriter::~CsvWriter() {
  * @brief Write a row to the CSV file.
  *
  * @param impl Implementation name.
+ * @param data_type Data type of the message.
+ * @param iters Number of iterations.
  * @param bytes Number of bytes in the message.
  * @param latency_ms Latency in milliseconds.
  * @param bandwidth_tb Bandwidth in TBps.
@@ -53,10 +55,10 @@ CsvWriter::~CsvWriter() {
  * @param max_rel_err Maximum relative error.
  * @param rmse Root mean square error.
  */
-void CsvWriter::WriteRow(const std::string& impl, std::size_t bytes, double latency_ms, double bandwidth_tb, double accuracy_pct, float max_abs_err, double mean_abs_err,
-                         float max_rel_err, double rmse) {
-    file_ << impl << ',' << bytes << ',' << latency_ms << ',' << bandwidth_tb << ',' << accuracy_pct << ',' << max_abs_err << ',' << mean_abs_err << ',' << max_rel_err << ','
-          << rmse << '\n';
+void CsvWriter::WriteRow(const std::string& impl, const std::string& data_type, const std::size_t& iters, std::size_t bytes, double latency_ms, double bandwidth_tb,
+                         double accuracy_pct, float max_abs_err, double mean_abs_err, float max_rel_err, double rmse) {
+    file_ << impl << ',' << data_type << ',' << iters << ',' << bytes << ',' << latency_ms << ',' << bandwidth_tb << ',' << accuracy_pct << ',' << max_abs_err << ','
+          << mean_abs_err << ',' << max_rel_err << ',' << rmse << '\n';
 }
 
 /**

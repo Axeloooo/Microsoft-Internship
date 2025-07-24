@@ -116,22 +116,8 @@ Results are written to `trt_allreduce/data/benchmark_trt_allreduce_<timestamp>_<
 
 ## Performance Results
 
-### FP32 User-Buffers AllReduce Results (Not Supported)
-
-| Message Bytes | Latency (µs) | Bandwidth (GB/s) | Accuracy (%) |
-| ------------: | -----------: | ---------------: | -----------: |
-|        163840 |          N/A |              N/A |          N/A |
-|        524288 |          N/A |              N/A |          N/A |
-|       1048576 |          N/A |              N/A |          N/A |
-|       2097152 |          N/A |              N/A |          N/A |
-
 ### FP16 User-Buffers AllReduce Results
 
-| Message Bytes | Latency (µs) | Bandwidth (GB/s) | Accuracy (%) |
-| ------------: | -----------: | ---------------: | -----------: |
-|        163840 |           80 |             15.0 |        100.0 |
-|        524288 |          320 |             16.5 |        100.0 |
-|       1048576 |          640 |             16.4 |        100.0 |
-|       2097152 |         1280 |             16.2 |        100.0 |
+![User-Buffers AllReduce Performance FP16](../../../trt_allreduce/images/latency_vs_size_20250723-224737.png)
 
 For full tables and CSVs, see files under `trt_allreduce/data/`. Use `python/plot_benchmark.py` to compare One-Shot, Two-Shot, and User-Buffers strategies visually.

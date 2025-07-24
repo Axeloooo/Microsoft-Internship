@@ -83,6 +83,14 @@ def plot_latency(df: pd.DataFrame) -> None:
     # Implementations present in the CSV
     impls: List[str] = df["implementation"].unique().tolist()
 
+    # Detect global data-type and iteration count (each constant per file)
+    dtype: str | None = None
+    if "data_type" in df.columns:
+        dtype = str(df["data_type"].iloc[0]).upper()
+    iters: int | None = None
+    if "iterations" in df.columns:
+        iters = int(df["iterations"].iloc[0])
+
     # Byte boundaries that delimit the three n-ranges
     smallest: int = int(df["message_bytes"].min())  # n = 1
     bound_1: int = smallest * 16  # n = 16
@@ -96,6 +104,8 @@ def plot_latency(df: pd.DataFrame) -> None:
     titles: List[str] = ["n = 1…15", "n = 16…127", "n = 128…1023"]
 
     fig, axes = plt.subplots(3, 1, figsize=(8, 12), sharex=False)
+
+    fig.suptitle(f"Latency vs Message Size (Data Type: {dtype}, Iterations: {iters})")
 
     for ax, (lo, hi), title in zip(axes, ranges, titles):
         # select rows inside the current range
@@ -120,7 +130,7 @@ def plot_latency(df: pd.DataFrame) -> None:
                 label=impl,
             )
 
-        ax.set_title(f"Latency vs Message Size ({title})")
+        ax.set_title(f"{title}")
         ax.set_xlabel("Message Size (Bytes)")
         ax.set_ylabel("Latency (µs)")
         ax.ticklabel_format(style="plain", axis="x")
