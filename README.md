@@ -1,6 +1,7 @@
 # Microsoft Internship Project
 
-![Publish Documentation](https://github.com/Axeloooo/Microsoft-Internship/actions/workflows/documentation.yml/badge.svg)
+![Release](https://github.com/Axeloooo/Microsoft-Internship/actions/workflows/release.yml/badge.svg)
+![Documentation](https://github.com/Axeloooo/Microsoft-Internship/actions/workflows/documentation.yml/badge.svg)
 ![Continuous Integration](https://github.com/Axeloooo/Microsoft-Internship/actions/workflows/continuous_integration.yml/badge.svg)
 
 ## Overview
