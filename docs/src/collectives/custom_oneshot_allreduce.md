@@ -74,20 +74,22 @@ Run across N ranks (N must match MPI world size and device count):
 ```bash
 cd trt_allreduce/scripts/
 chmod +x benchmark.sh
-./benchmark.sh -n 8 -d fp32 -i 20
+./benchmark.sh -n 8 -d fp32 -i 100 -s oneshot
 ```
 
 Where:
 
-- `-n {N}`: Number of ranks (must match devices).
-- `-d {fp32,fp16}`: Select precision.
-- `-i`: Number of timed iterations (after 10 warm-up iterations).
+- `-n {N}`: Number of ranks.
+- `-d {fp16}`: Select precision.
+- `-i {N}`: Number of timed iterations (after 10 warm-up iterations).
+- `-s {all|oneshot|twoshot|ub}`: Use specific AllReduce strategy.
 
 Default parameters:
 
-- `-n 8`: Number of ranks (must match devices).
+- `-n 8`: Number of ranks.
 - `-d fp32`: Select precision.
 - `-i 1`: Number of timed iterations (after 10 warm-up iterations).
+- `-s all`: Use all the AllReduce strategies.
 
 Results are written to `trt_allreduce/data/benchmark_trt_allreduce_<timestamp>_<dtype>.csv`.
 
